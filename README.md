@@ -57,11 +57,3 @@ have the ability to SSH into `<destserver>` as root.  All data transfer
 takes place over SSH, because we don't trust any network, and it simplifies
 so many things (such as link-level compression, if you want it).  If CPU is
 an issue, you shouldn't be running LVM on your phone anyway.
-
-
-## Limitations
-
-Apart from the sparse, user-hostile nature of the whole process, the
-following are known limitations of the `lvmsync` tool.  None of them are
-huge design problems, merely things that haven't been needed yet.  Feel free
-to add them in if you need them.
