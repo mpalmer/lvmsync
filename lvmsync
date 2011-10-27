@@ -8,8 +8,6 @@
 #    lvmsync <origin LV> <remote>:<destblock>
 #
 
-require 'optparse'
-
 def main()
 	# Parse me some options
 	if ARGV[0].nil?
