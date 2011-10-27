@@ -1,0 +1,144 @@
+#!/usr/bin/ruby
+
+# Transfer a set of changes made to the origin of a snapshot LV to a block
+# device on a remote system.
+#
+# Usage:
+#
+#    lvmsync <origin LV> <remote>:<destblock>
+#
+
+require 'optparse'
+
+def main()
+	# Parse me some options
+	if ARGV[0].nil?
+		$stderr.puts "ERROR: No LV specified.  Exiting."
+		exit 1
+	end
+	
+	if ARGV[0] == '--server'
+		if (ARGV[1].nil?)
+			$stderr.puts "No destination LV specified.  WTF?"
+			exit 1
+		end
+		run_server(ARGV[1])
+	else
+		if (ARGV[1].nil?)
+			$stderr.puts "No destination specified."
+			exit 1
+		end
+		host, dev = ARGV[1].split(':', 2)
+		run_client(ARGV[0], host, dev)
+	end
+end
+
+def run_server(destblock)
+	handshake = $stdin.readline.chomp
+	unless handshake == "lvmsync PROTO[1]"
+		$stderr.puts "Handshake failed; protocol mismatch? (saw '#{handshake}' expected '{lvmsync PROTO[1]}'"
+		exit 1
+	end
+
+	File.open(destblock, 'w') do |dest|
+		while offset = $stdin.read(8)
+			offset = offset.unpack("Q")[0]
+			dest.seek offset * 4096
+			dest.write $stdin.read(4096)
+		end
+	end
+end
+
+def run_client(originlv, remotehost, remotedev)
+	origindm = case originlv
+		when %r{^/dev/([^/]+)/(.+)$}:
+			a = $1
+			b = $2
+			a.gsub('-', '--') +
+			'-' +
+			b.gsub('-', '--')
+		when %r{^([^/]+)/(.*)$}:
+			a = $1
+			b = $2
+			a.gsub('-', '--') +
+			'-' +
+			b.gsub('-', '--')
+		else
+			originlv
+	end
+
+	# First, read the dm table so we can see what we're dealing with
+	dmtable = `dmsetup table`
+
+	# Find the origin LV...
+	origintable = dmtable.split(/$/).grep(/^#{origindm}: /)[0]
+
+	# This could be done in one line, but we'd prefer to give two separate error
+	# messages in case our mangling code above is sucky
+	if origintable.nil?
+		$stderr.puts "Could not find dm device '#{origindm}' (mangled from '#{originlv}')"
+		exit 1
+	end
+
+	if origintable =~ /^#{origindm}: \d+ \d+ snapshot-origin (\d+:\d+)$/
+		origin_dev = $1
+	else
+		$stderr.puts "#{originlv} does not appear to be a snapshot origin LV"
+		exit 1
+	end
+
+	puts "Found origin dm device: #{origin_dev}"
+
+	# Now we need to find the matching snapshot metadata device
+	if dmtable =~ /^([A-Za-z0-9-]+): \d+ \d+ snapshot #{origin_dev} \d+:\d+ P \d+$/
+		snapshot_cow = $1 + "-cow"
+	else
+		$stderr.puts "Failed to find a persistent snapshot device for '#{originlv}'"
+		exit 1
+	end
+
+	# Since we really shouldn't be reading from the CoW device directly, the
+	# kernel makes no attempt to make the device's read cache stay in sync
+	# with the actual state of the device.  As a result, we have to manually
+	# drop all caches before the data looks consistent.  PERFORMANCE WIN!
+	File.open("/proc/sys/vm/drop_caches", 'w') { |fd| fd.print "3" }
+
+	puts "Reading snapshot metadata from /dev/mapper/#{snapshot_cow}"
+	puts "Reading changed blocks from /dev/mapper/#{origindm}"
+
+	xfer_count = 0
+	total_size = 0
+	IO.popen("ssh #{remotehost} lvmsync --server #{remotedev}", 'w') do |remoteserver|
+		remoteserver.puts "lvmsync PROTO[1]"
+	
+		File.open("/dev/mapper/#{origindm}", 'r') do |origindev|
+			File.open("/dev/mapper/#{snapshot_cow}", 'r') do |snapdev|
+				# Jump over the header
+				snapdev.seek 4096
+				in_progress = true
+				while in_progress
+					256.times do
+						origin_offset, snap_offset = snapdev.read(16).unpack("QQ")
+						if snap_offset == 0
+							in_progress = false
+							break
+						end
+						puts "Transferring block #{origin_offset}"
+						xfer_count += 1
+						origindev.seek origin_offset * 4096
+						remoteserver.print [origin_offset].pack("Q")
+						remoteserver.print origindev.read(4096)
+					end
+					snapdev.seek 1048576, IO::SEEK_CUR if in_progress
+				end
+			end
+			origindev.seek(0, IO::SEEK_END)
+			total_size = origindev.tell / 4096
+		end
+	end
+	
+	puts "Transferred #{xfer_count} of #{total_size} blocks"
+	puts "You saved #{(total_size - xfer_count) / total_size.to_f * 100}% of your transfer size!"
+end
+
+main if __FILE__ == $0
