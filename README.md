@@ -9,7 +9,7 @@ too can have efficient delta-transfer of changed blocks.
 
 ## What is it good for?
 
-Mostly, transferring whole block devices from one machine to another, with
+Mostly, transferring entire block devices from one machine to another, with
 minimal downtime.  Until now, you had to shutdown your service/VM/whatever,
 do a big cross-network dd (using netcat or something), and wait while all
 that transferred.
@@ -57,3 +57,24 @@ have the ability to SSH into `<destserver>` as root.  All data transfer
 takes place over SSH, because we don't trust any network, and it simplifies
 so many things (such as link-level compression, if you want it).  If CPU is
 an issue, you shouldn't be running LVM on your phone anyway.
+
+
+## See Also
+
+Whilst I think `lvmsync` is awesome (and I hope you will too), here are some
+other tools that might be of use to you if `lvmsync` doesn't float your
+mustard:
+
+* [`blocksync.py`](http://www.bouncybouncy.net/programs/blocksync.py) --
+  Implements the "hash the chunks and send the ones that don't match"
+  strategy of block device syncing.  It needs to read the entire block
+  device at each end to work out what to send, so it's not as efficient,
+  but on the other hand it doesn't require LVM.
+
+* [`ddsnap`](http://zumastor.org/man/ddsnap.8.html) -- Part of the
+  "Zumastor" project, appears to provide some sort of network-aware block
+  device snapshotting (I'm not sure, the Zumastor homepage includes the word
+  "Enterprise", so I fell asleep before finishing reading).  Seems to
+  require kernel patches, so there's a non-trivial barrier to entry, but
+  probably not such a big deal if you're after network-aware snapshots as
+  part of your core infrastructure.
