@@ -5,19 +5,19 @@
 #
 # Usage:
 #
-#    lvmsync <origin LV> <remote>:<destblock>
+#    lvmsync <snapshot> <remote>:<destblock>
 #
 
 def main()
 	# Parse me some options
 	if ARGV[0].nil?
-		$stderr.puts "ERROR: No LV specified.  Exiting."
+		$stderr.puts "ERROR: No snapshot specified.  Exiting."
 		exit 1
 	end
 	
 	if ARGV[0] == '--server'
 		if (ARGV[1].nil?)
-			$stderr.puts "No destination LV specified.  WTF?"
+			$stderr.puts "No destination block device specified.  WTF?"
 			exit 1
 		end
 		run_server(ARGV[1])
@@ -31,14 +31,14 @@ def main()
 	end
 end
 
-def run_server(destblock)
+def run_server(destdev)
 	handshake = $stdin.readline.chomp
 	unless handshake == "lvmsync PROTO[1]"
 		$stderr.puts "Handshake failed; protocol mismatch? (saw '#{handshake}' expected '{lvmsync PROTO[1]}'"
 		exit 1
 	end
 
-	File.open(destblock, 'w') do |dest|
+	File.open(destdev, 'w') do |dest|
 		while offset = $stdin.read(8)
 			offset = offset.unpack("Q")[0]
 			dest.seek offset * 4096
@@ -47,61 +47,47 @@ def run_server(destblock)
 	end
 end
 
-def run_client(originlv, remotehost, remotedev)
-	origindm = case originlv
-		when %r{^/dev/([^/]+)/(.+)$}:
-			a = $1
-			b = $2
-			a.gsub('-', '--') +
-			'-' +
-			b.gsub('-', '--')
-		when %r{^([^/]+)/(.*)$}:
-			a = $1
-			b = $2
-			a.gsub('-', '--') +
-			'-' +
-			b.gsub('-', '--')
-		else
-			originlv
-	end
+def run_client(snapshot, remotehost, remotedev)
+	snapshotdm = canonicalise_dm(snapshot)
 
 	# First, read the dm table so we can see what we're dealing with
-	dmtable = `dmsetup table`
+	dmtable = read_dm_table
+	dmlist = read_dm_list
 
-	# Find the origin LV...
-	origintable = dmtable.split(/$/).grep(/^#{origindm}: /)[0]
-
-	# This could be done in one line, but we'd prefer to give two separate error
-	# messages in case our mangling code above is sucky
-	if origintable.nil?
-		$stderr.puts "Could not find dm device '#{origindm}' (mangled from '#{originlv}')"
+	if dmlist[snapshotdm].nil?
+		$stderr.puts "Could not find dm device '#{snapshot}' (name mangled to '#{snapshotdm}')"
 		exit 1
 	end
 
-	if origintable =~ /^#{origindm}: \d+ \d+ snapshot-origin (\d+:\d+)$/
-		origin_dev = $1
-	else
-		$stderr.puts "#{originlv} does not appear to be a snapshot origin LV"
+	if dmtable[snapshotdm][0][:type] != 'snapshot'
+		$stderr.puts "#{snapshot} does not appear to be a snapshot"
+		exit 1
+	end
+	
+	origindm = dm_from_devnum(dmtable[snapshotdm][0][:args][0], dmlist)
+	
+	if origindm.nil?
+		$stderr.puts "CAN'T HAPPEN: No origin device for #{snapshot} found"
 		exit 1
 	end
 
-	puts "Found origin dm device: #{origin_dev}"
-
-	# Now we need to find the matching snapshot metadata device
-	if dmtable =~ /^([A-Za-z0-9-]+): \d+ \d+ snapshot #{origin_dev} \d+:\d+ P \d+$/
-		snapshot_cow = $1 + "-cow"
-	else
-		$stderr.puts "Failed to find a persistent snapshot device for '#{originlv}'"
+	puts "Found origin dm device: #{origindm}"
+	
+	exceptiondm = dm_from_devnum(dmtable[snapshotdm][0][:args][1], dmlist)
+	
+	if exceptiondm.nil?
+		$stderr.puts "CAN'T HAPPEN: No exception list device for #{snapshot} found!"
 		exit 1
 	end
 
-	# Since we really shouldn't be reading from the CoW device directly, the
-	# kernel makes no attempt to make the device's read cache stay in sync
-	# with the actual state of the device.  As a result, we have to manually
-	# drop all caches before the data looks consistent.  PERFORMANCE WIN!
+	# Since, in principle, we're not supposed to be reading from the CoW
+	# device directly, the kernel makes no attempt to make the device's read
+	# cache stay in sync with the actual state of the device.  As a result,
+	# we have to manually drop all caches before the data looks consistent. 
+	# PERFORMANCE WIN!
 	File.open("/proc/sys/vm/drop_caches", 'w') { |fd| fd.print "3" }
 
-	puts "Reading snapshot metadata from /dev/mapper/#{snapshot_cow}"
+	puts "Reading snapshot metadata from /dev/mapper/#{exceptiondm}"
 	puts "Reading changed blocks from /dev/mapper/#{origindm}"
 
 	xfer_count = 0
@@ -110,7 +96,7 @@ def run_client(originlv, remotehost, remotedev)
 		remoteserver.puts "lvmsync PROTO[1]"
 	
 		File.open("/dev/mapper/#{origindm}", 'r') do |origindev|
-			File.open("/dev/mapper/#{snapshot_cow}", 'r') do |snapdev|
+			File.open("/dev/mapper/#{exceptiondm}", 'r') do |snapdev|
 				# Jump over the header
 				snapdev.seek 4096
 				in_progress = true
@@ -137,6 +123,81 @@ def run_client(originlv, remotehost, remotedev)
 	
 	puts "Transferred #{xfer_count} of #{total_size} blocks"
 	puts "You saved #{(total_size - xfer_count) / total_size.to_f * 100}% of your transfer size!"
+end
+
+# Call dmsetup ls and turn that into a hash of dm_name => [maj, min] data.
+# Note that maj, min will be integers, and dm_name a string.
+def read_dm_list
+	dmlist = {}
+	`dmsetup ls`.split("\n").each do |l|
+		next unless l =~ /^(\S+)\s+\((\d+), (\d+)\)$/
+		dmlist[$1] = [$2.to_i, $3.to_i]
+	end
+	dmlist
+end
+
+# Call dmsetup table and turn that into a complicated hash of dm table data.
+#
+# Structure is:
+#
+#   dm_name => [
+#     { :offset => int,
+#       :length => int,
+#       :type => (linear|snapshot|...),
+#       :args => [str, str, str]
+#     },
+#     { ... }
+#   ],
+#   dm_name => [ ... ]
+#
+# The arguments are kept as a list of strings (split on whitespace), and
+# you'll need to interpret them yourself.  Turning this whole shebang into a
+# class hierarchy is a task for another time.
+#
+def read_dm_table
+	dmtable = {}
+	`dmsetup table`.split("\n").each do |l|
+		next unless l =~ /^(\S+): (\d+) (\d+) (\S+) (.*)$/
+		dmtable[$1] ||= []
+		dmtable[$1] << { :offset => $2,
+		                 :length => $3,
+		                 :type => $4,
+		                 :args => $5.split(/\s+/)
+		               }
+	end
+	dmtable
+end
+
+# Take a device name in any number of different formats and turn it into a
+# "canonical" devicemapper name, equivalent to what you'll find in the likes
+# of dmsetup ls
+def canonicalise_dm(origname)
+	case origname
+		when %r{^/dev/mapper/(.+)$}:
+			$1
+		when %r{^/dev/([^/]+)/(.+)$}:
+			vg = $1
+			lv = $2
+			vg.gsub('-', '--') +
+			'-' +
+			lv.gsub('-', '--')
+		when %r{^([^/]+)/(.*)$}:
+			vg = $1
+			lv = $2
+			vg.gsub('-', '--') +
+			'-' +
+			lv.gsub('-', '--')
+		else
+			# Let's *assume* that the user just gave us vg-lv...
+			origname
+	end
+end
+
+# Find the name of a dm device that corresponds to the given <maj>:<min>
+# string provided.
+def dm_from_devnum(devnum, dmlist)
+	maj, min = devnum.split(':', 2)
+	dmlist.invert[[maj.to_i, min.to_i]]
 end
 
 main if __FILE__ == $0

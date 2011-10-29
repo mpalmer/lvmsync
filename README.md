@@ -51,13 +51,13 @@ snapshot changes -- the rest you'll have to handle by hand (for now).
 
 To transfer changes to another machine, call `lvmsync` like this:
 
-    lvmsync <origin LV> <destserver>:<destblock>
+    lvmsync <snapshot LV> <destserver>:<destblock>
 
 This requires that `lvmsync` is installed on `<destserver>`, and that you
 have the ability to SSH into `<destserver>` as root.  All data transfer
 takes place over SSH, because we don't trust any network, and it simplifies
 so many things (such as link-level compression, if you want it).  If CPU is
-an issue, you shouldn't be running LVM on your phone anyway.
+an issue, you shouldn't be running LVM on your phone to begin with.
 
 
 ## See Also
