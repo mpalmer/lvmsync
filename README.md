@@ -25,12 +25,13 @@ is:
 block device itself keeps running.
 1. When the initial transfer is finished, you shutdown/unmount/whatever the
 initial block device
-1. Run lvmsync over the existing LV and it's snapshot
-1. The only thing transferred over the network is the blocks that have
-changed (which, hopefully, will be minimal)
+1. Run lvmsync on the snapshot to transfer the changed blocks
+ * The only thing transferred over the network is the blocks that have
+   changed (which, hopefully, will be minimal)
 1. If you're paranoid, you can md5sum the content of the source and
 destination block devices, to make sure everything's OK (although this will
-trash your performance benefits)
+destroy any performance benefit you got by running lvmsync in the first
+lace)
 1. Bring the service/VM/whatever back up in it's new home in a *much*
 shorter (as in, "orders of magnitude") time than was previously possible.
 
