@@ -33,16 +33,17 @@ end
 
 def run_server(destdev)
 	handshake = $stdin.readline.chomp
-	unless handshake == "lvmsync PROTO[1]"
+	unless handshake == "lvmsync PROTO[2]"
 		$stderr.puts "Handshake failed; protocol mismatch? (saw '#{handshake}' expected '{lvmsync PROTO[1]}'"
 		exit 1
 	end
 
 	File.open(destdev, 'w') do |dest|
-		while offset = $stdin.read(8)
-			offset = offset.unpack("Q")[0]
-			dest.seek offset * 4096
-			dest.write $stdin.read(4096)
+		while header = $stdin.read(12)
+			offset, chunksize = header.unpack("QN")
+			offset = ntohq(offset)
+			dest.seek offset * chunksize
+			dest.write $stdin.read(chunksize)
 		end
 	end
 end
@@ -88,32 +89,35 @@ def run_client(snapshot, remotehost, remotedev)
 	File.open("/proc/sys/vm/drop_caches", 'w') { |fd| fd.print "3" }
 
 	puts "Reading snapshot metadata from /dev/mapper/#{exceptiondm}"
-	puts "Reading changed blocks from /dev/mapper/#{origindm}"
+	puts "Reading changed chunks from /dev/mapper/#{origindm}"
 
 	xfer_count = 0
 	total_size = 0
 	IO.popen("ssh #{remotehost} lvmsync --server #{remotedev}", 'w') do |remoteserver|
-		remoteserver.puts "lvmsync PROTO[1]"
+		remoteserver.puts "lvmsync PROTO[2]"
 	
 		File.open("/dev/mapper/#{origindm}", 'r') do |origindev|
 			File.open("/dev/mapper/#{exceptiondm}", 'r') do |snapdev|
-				# Jump over the header
-				snapdev.seek 4096
+				chunksize = read_header(snapdev)
+				
+				snapdev.seek chunksize
 				in_progress = true
 				while in_progress
-					256.times do
+					(chunksize / 16).times do
 						origin_offset, snap_offset = snapdev.read(16).unpack("QQ")
+						origin_offset = ntohq(origin_offset)
+						snap_offset = ntohq(snap_offset)
 						if snap_offset == 0
 							in_progress = false
 							break
 						end
-						puts "Transferring block #{origin_offset}"
 						xfer_count += 1
-						origindev.seek origin_offset * 4096
-						remoteserver.print [origin_offset].pack("Q")
-						remoteserver.print origindev.read(4096)
+						puts "Sending chunk #{origin_offset}"
+						origindev.seek origin_offset * chunksize
+						remoteserver.print [htonq(origin_offset), chunksize].pack("QN")
+						remoteserver.print origindev.read(chunksize)
 					end
-					snapdev.seek 1048576, IO::SEEK_CUR if in_progress
+					snapdev.seek chunksize * chunksize / 16, IO::SEEK_CUR if in_progress
 				end
 			end
 			origindev.seek(0, IO::SEEK_END)
@@ -121,7 +125,7 @@ def run_client(snapshot, remotehost, remotedev)
 		end
 	end
 	
-	puts "Transferred #{xfer_count} of #{total_size} blocks"
+	puts "Transferred #{xfer_count} of #{total_size} chunks"
 	puts "You saved #{(total_size - xfer_count) / total_size.to_f * 100}% of your transfer size!"
 end
 
@@ -198,6 +202,31 @@ end
 def dm_from_devnum(devnum, dmlist)
 	maj, min = devnum.split(':', 2)
 	dmlist.invert[[maj.to_i, min.to_i]]
+end
+
+# Read the header off our snapshot device, validate all is well, and return
+# the chunksize used by the snapshot, in bytes
+def read_header(snapdev)
+	magic, valid, metadata_version, chunksize = snapdev.read(16).unpack("VVVV")
+	raise RuntimeError.new("Invalid snapshot magic number") unless magic == 0x70416e53
+	raise RuntimeError.new("Snapshot marked as invalid") unless valid == 1
+	raise RuntimeError.new("Incompatible metadata version") unless metadata_version == 1
+	
+	# With all that out of the way, we can get down to business
+	chunksize * 512
+end
+
+# Are we on a big-endian system?  Needed for our htonq/ntohq methods
+def big_endian?
+	@bigendian ||= [1].pack("s") == [1].pack("n")
+end
+
+def htonq val
+	big_endian? ? ([val].pack("Q").reverse.unpack("Q").first) : val
+end
+
+def ntohq val
+	htonq val
 end
 
 main if __FILE__ == $0
