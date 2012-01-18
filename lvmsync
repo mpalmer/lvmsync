@@ -8,20 +8,31 @@
 #    lvmsync <snapshot> <remote>:<destblock>
 #
 
+require 'optparse'
+
 def main()
 	# Parse me some options
-	if ARGV[0].nil?
-		$stderr.puts "ERROR: No snapshot specified.  Exiting."
-		exit 1
-	end
+	options = {}
+	OptionParser.new do |opts|
+		opts.banner = "Usage: lvmsync [--server <destdevice>] | [<snapshot device> <desthost>:<destdevice>]"
+		
+		opts.on("--server", "Run in server mode (not intended for interactive use)") do |v|
+			options[:server] = true
+		end
+	end.parse!
 	
-	if ARGV[0] == '--server'
-		if (ARGV[1].nil?)
+	if options[:server]
+		if (ARGV[0].nil?)
 			$stderr.puts "No destination block device specified.  WTF?"
 			exit 1
 		end
-		run_server(ARGV[1])
+		run_server(ARGV[0])
 	else
+		if ARGV[0].nil?
+			$stderr.puts "ERROR: No snapshot specified.  Exiting."
+			exit 1
+		end
+	
 		if (ARGV[1].nil?)
 			$stderr.puts "No destination specified."
 			exit 1
