@@ -10,6 +10,8 @@
 
 require 'optparse'
 
+PROTOCOL_VERSION = "lvmsync PROTO[2]"
+
 def main()
 	# Parse me some options
 	options = {}
@@ -51,8 +53,8 @@ def run_server(opts)
 	destdev = opts[:destdev]
 	
 	handshake = $stdin.readline.chomp
-	unless handshake == "lvmsync PROTO[2]"
-		$stderr.puts "Handshake failed; protocol mismatch? (saw '#{handshake}' expected '{lvmsync PROTO[1]}'"
+	unless handshake == PROTOCOL_VERSION
+		$stderr.puts "Handshake failed; protocol mismatch? (saw '#{handshake}' expected '#{PROTOCOL_VERSION}'"
 		exit 1
 	end
 
@@ -117,7 +119,7 @@ def run_client(opts)
 	total_size = 0
 	chunksize = nil
 	IO.popen("ssh #{remotehost} lvmsync --server #{remotedev}", 'w') do |remoteserver|
-		remoteserver.puts "lvmsync PROTO[2]"
+		remoteserver.puts PROTOCOL_VERSION
 	
 		File.open("/dev/mapper/#{origindm}", 'r') do |origindev|
 			File.open("/dev/mapper/#{exceptiondm}", 'r') do |snapdev|
