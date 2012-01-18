@@ -51,7 +51,7 @@ snapshot changes -- the rest you'll have to handle by hand (for now).
 
 To transfer changes to another machine, call `lvmsync` like this:
 
-    lvmsync <snapshot LV> <destserver>:<destblock>
+    lvmsync <snapshot LV device> <destserver>:<destblock>
 
 This requires that `lvmsync` is installed on `<destserver>`, and that you
 have the ability to SSH into `<destserver>` as root.  All data transfer
