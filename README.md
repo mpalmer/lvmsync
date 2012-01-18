@@ -59,6 +59,41 @@ takes place over SSH, because we don't trust any network, and it simplifies
 so many things (such as link-level compression, if you want it).  If CPU is
 an issue, you shouldn't be running LVM on your phone to begin with.
 
+The reason why `lvmsync` needs you to specify the snapshot you want to sync,
+and not the base LV, is that you might have more than one snapshot of a
+given LV, and while we can determine the base LV given a snapshot, you can't
+work out which snapshot to sync given a base LV.
+
+
+### Example
+
+Let's say you've got an LV, named `vmsrv1/somevm`, and you'd like to
+synchronise it to a new VM server, named `vmsrv2`.  Assuming that `lvmsync` is
+installed on `vmsrv2` and `vmsrv2` has an LV named `vmsrv2/somevm` large
+enough to take the data, the following will do the trick rather nicely (all
+commands should be run on `vmsrv1`:
+
+    # Take a snapshot before we do anything, so LVM will record all changes
+    # made while we're doing the initial sync
+    lvcreate --snapshot -L10G -n somevm-lvmsync vmsrv1/somevm
+
+    # Pre-sync all data across -- this will take some time, but while it's
+    # happening the VM is still serving traffic.  pv is a great tool for
+    # showing you how fast your data's moving, but you can leave it out of
+    # the pipeline if you don't have it installed.
+    dd if=/dev/vmsrv1/somevm of=- bs=1M | pv -ptrb | ssh root@vmsrv2 dd of=/dev/vmsrv2/somevm
+
+    # Shutdown the VM -- the command you use will probably vary
+    virsh shutdown somevm
+    
+    # Once it's shutdown and the block device isn't going to be written to
+    # any more, then you can run lvmsync
+    lvmsync /dev/vmsrv1/somevm-lvmsync vmsrv2:/dev/vmsrv2/somevm
+    
+    # You can now start up the VM on vmsrv2, after a fairly small period of
+    # downtime.  Once you're done, you can remove the snapshot and,
+    # presumably, the LV itself, from `vmsrv1`
+
 
 ## See Also
 
