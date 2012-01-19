@@ -22,6 +22,9 @@ def main()
 			options[:server] = true
 		end
 		opts.on("-v", "--[no-]verbose", "Run verbosely") { |v| options[:verbose] = true }
+		opts.on("-b <file>", "--snapback <file>", "Make a backup snapshot file on the destination") do |v|
+			options[:snapback] = v
+		end
 	end.parse!
 	
 	if options[:server]
@@ -57,13 +60,29 @@ def run_server(opts)
 		$stderr.puts "Handshake failed; protocol mismatch? (saw '#{handshake}' expected '#{PROTOCOL_VERSION}'"
 		exit 1
 	end
+	
+	if opts[:snapback]
+		File.open(opts[:snapback], 'w') do |snapback|
+			snapback.puts PROTOCOL_VERSION
+			process_dumpdata($stdin, destdev, snapback)
+		end
+	else
+		process_dumpdata($stdin, destdev, nil)
+	end
+end
 
-	File.open(destdev, 'w') do |dest|
-		while header = $stdin.read(12)
+def process_dumpdata(instream, destdev, snapback = nil)
+	File.open(destdev, 'w+') do |dest|
+		while header = instream.read(12)
 			offset, chunksize = header.unpack("QN")
 			offset = ntohq(offset)
 			dest.seek offset * chunksize
-			dest.write $stdin.read(chunksize)
+			if snapback
+				snapback.write(header)
+				snapback.write dest.read(chunksize)
+				dest.seek offset * chunksize
+			end
+			dest.write instream.read(chunksize)
 		end
 	end
 end
@@ -118,7 +137,9 @@ def run_client(opts)
 	xfer_count = 0
 	total_size = 0
 	chunksize = nil
-	IO.popen("ssh #{remotehost} lvmsync --server #{remotedev}", 'w') do |remoteserver|
+	snapback = opts[:snapback] ? "--snapback #{opts[:snapback]}" : ''
+		
+	IO.popen("ssh #{remotehost} lvmsync --server #{snapback} #{remotedev}", 'w') do |remoteserver|
 		remoteserver.puts PROTOCOL_VERSION
 	
 		File.open("/dev/mapper/#{origindm}", 'r') do |origindev|
