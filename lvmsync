@@ -16,7 +16,12 @@ def main()
 	# Parse me some options
 	options = {}
 	OptionParser.new do |opts|
-		opts.banner = "Usage: lvmsync [--server <destdevice>] | [<snapshot device> <desthost>:<destdevice>]"
+		opts.banner = "Usage: lvmsync [options]"
+		opts.separator ""
+		opts.separator "    lvmsync [--snapback <file>] <snapshot device> <remotehost>:<remotedevice>"
+		opts.separator "    lvmsync --server <destdevice>"
+		opts.separator "    lvmsync --apply <snapback file> <destdevice>"
+		opts.separator ""
 		
 		opts.on("--server", "Run in server mode (not intended for interactive use)") do |v|
 			options[:server] = true
@@ -25,9 +30,24 @@ def main()
 		opts.on("-b <file>", "--snapback <file>", "Make a backup snapshot file on the destination") do |v|
 			options[:snapback] = v
 		end
+		opts.on("-a", "--apply", "Apply mode: write the contents of a snapback file to a device") do |v|
+			options[:apply] = true
+		end
 	end.parse!
 	
-	if options[:server]
+	if options[:apply]
+		if ARGV[0].nil?
+			$stderr.puts "No snapback file specified."
+			exit 1
+		end
+		if ARGV[1].nil?
+			$stderr.puts "No destination device specified."
+			exit 1
+		end
+		options[:snapfile] = ARGV[0]
+		options[:device] = ARGV[1]
+		run_apply(options)
+	elsif options[:server]
 		if (ARGV[0].nil?)
 			$stderr.puts "No destination block device specified.  WTF?"
 			exit 1
@@ -173,6 +193,21 @@ def run_client(opts)
 	
 	puts "Transferred #{xfer_count} of #{total_size} chunks (#{chunksize} bytes per chunk)"
 	puts "You saved #{(total_size - xfer_count) / total_size.to_f * 100}% of your transfer size!"
+end
+
+def run_apply(opts)
+	snapfile = opts[:snapfile]
+	device = opts[:device]
+	
+	File.open(snapfile, 'r') do |snapfd|
+		handshake = snapfd.readline.chomp
+		unless handshake == PROTOCOL_VERSION
+			$stderr.puts "Handshake failed; protocol mismatch? (saw '#{handshake}' expected '#{PROTOCOL_VERSION}'"
+			exit 1
+		end
+	
+		process_dumpdata(snapfd, device, nil)
+	end
 end
 
 # Call dmsetup ls and turn that into a hash of dm_name => [maj, min] data.
