@@ -45,6 +45,10 @@ device-mapper uses to keep track of what parts of the block device have
 changed, and use that information to only send those modified blocks over
 the network.
 
+If you're really interested in the gory details, there's a brief "Theory of
+Operation" section at the bottom of this README, or else you can just head
+straight for the source code.
+
 
 ## Installation
 
@@ -184,6 +188,48 @@ If you're wondering why I only restored the 0900 snapback, and not the 0800
 one, it's because the snapback made at 0900 copied the changes that were sent
 at 0800 (and about to be overwritten at 0900) and wrote them to the 0900
 snapback file.  Confused much?  Good.
+
+
+## Theory of Operation
+
+First, a little bit of background about how snapshot LVs work, before I
+describe how lvmsync makes use of them.
+
+An LVM snapshot "device" is actually not a block device in the usual sense. 
+It isn't just a big area of disk space where you write things.  Instead, it
+is a "meta" device, which points to both an "origin" LV, which is the LV
+from which the snapshot was made, and a "metadata" LV, which is where the
+magic happens.
+
+The "metadata" LV is a list of "chunks" of the origin LV which have been
+modified, along with the original contents of those chunks.  In a way, you
+can think of it as a sort of "binary diff", which says "these are the ways
+in which this snapshot LV differs from the origin LV".  When a write happens
+to the origin LV, this "diff" is potentially modified to maintain the
+original "view" from the time the snapshot was taken.
+
+(Sidenote: this is why you can write to snapshots -- if you write to a
+snapshot, the "diff" is written to some more, to say "here are some more
+differences between the origin and the snapshot").
+
+From here, it shouldn't be hard to work out how LVM uses the combination of
+the origin and metadata LVs to give you a consistent snapshot view -- when
+you ask to read a chunk, LVM looks in the metadata LV to see if it has the
+chunk in there, and if not it can be sure that the chunk hasn't changed, so
+it just reads it from the origin LV.  Miiiiighty clever!
+
+In lvmsync, we only make use of a tiny fraction of the data stored in the
+metadata LV for the snapshot.  We don't care what the original contents were
+(they're what we're trying to get *away* from).  What we want is the list of
+which chunks have been modified, because that's what we use to work out
+which blocks on the original LV we need to copy across.  lvmsync never
+*actually* reads any disk data from the snapshot block device itself -- all
+it reads is the list of changed blocks, then it reads the changed data from
+the original LV (which is where the modified blocks are stored).
+
+By specifying a snapshot to lvmsync, you're telling it "this is the list of
+changes I want you to copy" -- it already knows which original LV it needs
+to copy from (the snapshot metadata has that info available).
 
 
 ## See Also
