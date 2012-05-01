@@ -19,6 +19,7 @@ def main()
 		opts.banner = "Usage: lvmsync [options]"
 		opts.separator ""
 		opts.separator "    lvmsync [--snapback <file>] <snapshot device> <remotehost>:<remotedevice>"
+		opts.separator "    lvmsync --local [--snapback <file>] <snapshot device> <destdevice>"
 		opts.separator "    lvmsync --server <destdevice>"
 		opts.separator "    lvmsync --apply <snapback file> <destdevice>"
 		opts.separator ""
@@ -32,6 +33,9 @@ def main()
 		end
 		opts.on("-a", "--apply", "Apply mode: write the contents of a snapback file to a device") do |v|
 			options[:apply] = true
+		end
+		opts.on("-l", "--local", "Local mode: operate on two local devices instead of a remote one") do |v|
+			options[:local] = true
 		end
 	end.parse!
 	
@@ -64,10 +68,15 @@ def main()
 			$stderr.puts "No destination specified."
 			exit 1
 		end
-		host, dev = ARGV[1].split(':', 2)
-		options[:snapdev] = ARGV[0]
-		options[:desthost] = host
-		options[:destdev] = dev
+		if options[:local]
+			options[:snapdev] = ARGV[0]
+			options[:destdev] = ARGV[1]
+		else
+			host, dev = ARGV[1].split(':', 2)
+			options[:snapdev] = ARGV[0]
+			options[:desthost] = host
+			options[:destdev] = dev
+		end
 		run_client(options)
 	end
 end
@@ -159,7 +168,12 @@ def run_client(opts)
 	chunksize = nil
 	snapback = opts[:snapback] ? "--snapback #{opts[:snapback]}" : ''
 		
-	IO.popen("ssh #{remotehost} lvmsync --server #{snapback} #{remotedev}", 'w') do |remoteserver|
+	if options[:local]
+		sync_cmd = "lvmsync --server #{snapback} #{remotedev}"
+	else
+		sync_cmd = "ssh #{remotehost} lvmsync --server #{snapback} #{remotedev}"
+	end
+	IO.popen(sync_cmd, 'w') do |remoteserver|
 		remoteserver.puts PROTOCOL_VERSION
 	
 		File.open("/dev/mapper/#{origindm}", 'r') do |origindev|
