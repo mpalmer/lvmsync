@@ -215,8 +215,8 @@ end
 def read_dm_list
 	dmlist = {}
 	`dmsetup ls`.split("\n").each do |l|
-		next unless l =~ /^(\S+)\s+\((\d+), (\d+)\)$/
-		dmlist[$1] = [$2.to_i, $3.to_i]
+		next unless l =~ /^(\S+)\s+\((\d+)(, |:)(\d+)\)$/
+		dmlist[$1] = [$2.to_i, $4.to_i]
 	end
 	dmlist
 end
