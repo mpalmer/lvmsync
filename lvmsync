@@ -168,6 +168,7 @@ def run_client(opts)
 				
 				snapdev.seek chunksize
 				in_progress = true
+				t = Time.now
 				while in_progress
 					(chunksize / 16).times do
 						origin_offset, snap_offset = snapdev.read(16).unpack("QQ")
@@ -184,6 +185,9 @@ def run_client(opts)
 						remoteserver.print origindev.read(chunksize)
 					end
 					snapdev.seek chunksize * chunksize / 16, IO::SEEK_CUR if in_progress
+					printf "\r%iB/s", chunksize / (Time.now - t)
+					$stdout.flush
+					t = Time.now
 				end
 			end
 			origindev.seek(0, IO::SEEK_END)
