@@ -190,6 +190,22 @@ at 0800 (and about to be overwritten at 0900) and wrote them to the 0900
 snapback file.  Confused much?  Good.
 
 
+### Transferring snapshots on the same machine
+
+If you need to transfer an LV between different VGs on the same machine,
+then running everything through SSH is just an unnecessary overhead.  If you
+instead just run `lvmsync` without the `<destserver>:` in the destination
+specification, everything runs locally, like this:
+
+    lvmsync /dev/vg0/srclv-snapshot /dev/vg1/destlv
+
+All other parts of the process (creating the snapshot, doing the initial
+data move with `dd`, and so on) are unchanged.
+
+As an aside, if you're trying to move LVs between PVs in the same VG, then
+you don't need `lvmsync`, you need `pvmove`.
+
+
 ## Theory of Operation
 
 First, a little bit of background about how snapshot LVs work, before I

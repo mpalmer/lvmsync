@@ -17,7 +17,7 @@ def main()
 	OptionParser.new do |opts|
 		opts.banner = "Usage: lvmsync [options]"
 		opts.separator ""
-		opts.separator "    lvmsync [--snapback <file>] <snapshot device> <remotehost>:<remotedevice>"
+		opts.separator "    lvmsync [--snapback <file>] <snapshot device> [<remotehost>:]<remotedevice>"
 		opts.separator "    lvmsync --server <destdevice>"
 		opts.separator "    lvmsync --apply <snapback file> <destdevice>"
 		opts.separator ""
@@ -63,7 +63,7 @@ def main()
 			$stderr.puts "No destination specified."
 			exit 1
 		end
-		host, dev = ARGV[1].split(':', 2)
+		dev, host = ARGV[1].split(':', 2).reverse
 		options[:snapdev] = ARGV[0]
 		options[:desthost] = host
 		options[:destdev] = dev
@@ -157,8 +157,14 @@ def run_client(opts)
 	total_size = 0
 	chunksize = nil
 	snapback = opts[:snapback] ? "--snapback #{opts[:snapback]}" : ''
+
+	server_cmd = if remotehost
+		"ssh #{remotehost} lvmsync --server #{snapback} #{remotedev}"
+	else
+		"lvmsync --server #{snapback} #{remotedev}"
+	end
 		
-	IO.popen("ssh #{remotehost} lvmsync --server #{snapback} #{remotedev}", 'w') do |remoteserver|
+	IO.popen(server_cmd, 'w') do |remoteserver|
 		remoteserver.puts PROTOCOL_VERSION
 	
 		File.open("/dev/mapper/#{origindm}", 'r') do |origindev|
