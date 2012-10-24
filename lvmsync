@@ -3,9 +3,8 @@
 # Transfer a set of changes made to the origin of a snapshot LV to a block
 # device on a remote system.
 #
-# Usage:
-#
-#    lvmsync <snapshot> <remote>:<destblock>
+# Usage: Start with lvmsync --help, or read the README for all the gory
+# details
 #
 
 require 'optparse'
