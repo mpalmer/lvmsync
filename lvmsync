@@ -262,15 +262,15 @@ end
 # of dmsetup ls
 def canonicalise_dm(origname)
 	case origname
-		when %r{^/dev/mapper/(.+)$}:
+		when %r{^/dev/mapper/(.+)$} then
 			$1
-		when %r{^/dev/([^/]+)/(.+)$}:
+		when %r{^/dev/([^/]+)/(.+)$} then
 			vg = $1
 			lv = $2
 			vg.gsub('-', '--') +
 			'-' +
 			lv.gsub('-', '--')
-		when %r{^([^/]+)/(.*)$}:
+		when %r{^([^/]+)/(.*)$} then
 			vg = $1
 			lv = $2
 			vg.gsub('-', '--') +
