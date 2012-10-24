@@ -208,6 +208,11 @@ you don't need `lvmsync`, you need `pvmove`.
 
 ## Theory of Operation
 
+This section is for those people who can't sleep well at night without
+knowing the magic behind the curtain (and to remind myself occasionally how
+this stuff works).  It is completely unnecessary to read this section in
+order to work lvmsync.
+
 First, a little bit of background about how snapshot LVs work, before I
 describe how lvmsync makes use of them.
 
