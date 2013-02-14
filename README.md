@@ -265,6 +265,10 @@ mustard:
   device at each end to work out what to send, so it's not as efficient,
   but on the other hand it doesn't require LVM.
 
+* [`bdsync`](http://bdsync.rolf-fokkens.nl/) -- Another "hash the chunks"
+  implementation, with the same limitations and advantages as
+  `blocksync.py`.
+
 * [`ddsnap`](http://zumastor.org/man/ddsnap.8.html) -- Part of the
   "Zumastor" project, appears to provide some sort of network-aware block
   device snapshotting (I'm not sure, the Zumastor homepage includes the word
