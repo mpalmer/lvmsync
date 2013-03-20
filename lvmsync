@@ -20,6 +20,7 @@ def main()
 		opts.separator "    lvmsync [--snapback <file>] <snapshot device> [<remotehost>:]<remotedevice>"
 		opts.separator "    lvmsync --server <destdevice>"
 		opts.separator "    lvmsync --apply <snapback file> <destdevice>"
+		opts.separator "    lvmsync --patch <patch file> <snapshot device>"
 		opts.separator ""
 		
 		opts.on("--server", "Run in server mode (not intended for interactive use)") do |v|
@@ -31,6 +32,9 @@ def main()
 		end
 		opts.on("-a", "--apply", "Apply mode: write the contents of a snapback file to a device") do |v|
 			options[:apply] = true
+		end
+		opts.on("--patch", "Patch moe: create a patch file that can be applied to the destdevice later via apply mode") do |v|
+			options[:patch] = true
 		end
 	end.parse!
 	
@@ -46,6 +50,18 @@ def main()
 		options[:snapfile] = ARGV[0]
 		options[:device] = ARGV[1]
 		run_apply(options)
+	elsif options[:patch]
+		if ARGV[0].nil?
+			$stderr.puts "No destination patch file specified."
+			exit 1
+		end
+		if ARGV[1].nil?
+			$stderr.puts "No snapshot device specified."
+			exit 1
+		end
+		options[:patchfile] = ARGV[0]
+		options[:snapdev] = ARGV[1]
+		run_client(options)
 	elsif options[:server]
 		if (ARGV[0].nil?)
 			$stderr.puts "No destination block device specified.  WTF?"
@@ -160,6 +176,8 @@ def run_client(opts)
 
 	server_cmd = if remotehost
 		"ssh #{remotehost} lvmsync --server #{snapback} #{remotedev}"
+	elsif opts[:patch]
+		"dd of=#{opts[:patchfile]} 2>/dev/null"
 	else
 		"lvmsync --server #{snapback} #{remotedev}"
 	end
