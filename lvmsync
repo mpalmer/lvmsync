@@ -18,11 +18,10 @@ def main()
 		opts.banner = "Usage: lvmsync [options]"
 		opts.separator ""
 		opts.separator "    lvmsync [--snapback <file>] <snapshot device> [<remotehost>:]<remotedevice>"
-		opts.separator "    lvmsync --server <destdevice>"
-		opts.separator "    lvmsync --apply <snapback file> <destdevice>"
+		opts.separator "    lvmsync --apply <changes file> <destdevice>"
 		opts.separator ""
 		
-		opts.on("--server", "Run in server mode (not intended for interactive use)") do |v|
+		opts.on("--server", "Run in server mode (deprecated; use '--apply -' instead)") do |v|
 			options[:server] = true
 		end
 		opts.on("-v", "--[no-]verbose", "Run verbosely") { |v| options[:verbose] = true }
@@ -43,16 +42,18 @@ def main()
 			$stderr.puts "No destination device specified."
 			exit 1
 		end
-		options[:snapfile] = ARGV[0]
+		options[:infile] = ARGV[0]
 		options[:device] = ARGV[1]
 		run_apply(options)
 	elsif options[:server]
+		$stderr.puts "--server is deprecated; please use '--apply -' instead"
 		if (ARGV[0].nil?)
 			$stderr.puts "No destination block device specified.  WTF?"
 			exit 1
 		end
-		options[:destdev] = ARGV[0]
-		run_server(options)
+		options[:infile] = '-'
+		options[:device] = ARGV[0]
+		run_apply(options)
 	else
 		if ARGV[0].nil?
 			$stderr.puts "ERROR: No snapshot specified.  Exiting."
@@ -71,26 +72,24 @@ def main()
 	end
 end
 
-def run_server(opts)
-	destdev = opts[:destdev]
+def run_apply(opts)
+	snapfile = opts[:snapback] ? File.open(opts[:snapback], 'w') : nil
+	infile   = opts[:infile] == '-' ? $stdin : File.open(opts[:infile], 'r')
+	destdev  = opts[:device]
 	
-	handshake = $stdin.readline.chomp
+	process_dumpdata(infile, destdev, snapfile)
+ensure
+	snapfile.close unless snapfile.nil?
+	infile.close unless infile.nil? or infile == $stdin
+end
+
+def process_dumpdata(instream, destdev, snapback = nil)
+	handshake = instream.readline.chomp
 	unless handshake == PROTOCOL_VERSION
 		$stderr.puts "Handshake failed; protocol mismatch? (saw '#{handshake}' expected '#{PROTOCOL_VERSION}'"
 		exit 1
 	end
-	
-	if opts[:snapback]
-		File.open(opts[:snapback], 'w') do |snapback|
-			snapback.puts PROTOCOL_VERSION
-			process_dumpdata($stdin, destdev, snapback)
-		end
-	else
-		process_dumpdata($stdin, destdev, nil)
-	end
-end
 
-def process_dumpdata(instream, destdev, snapback = nil)
 	File.open(destdev, 'w+') do |dest|
 		while header = instream.read(12)
 			offset, chunksize = header.unpack("QN")
@@ -159,9 +158,9 @@ def run_client(opts)
 	snapback = opts[:snapback] ? "--snapback #{opts[:snapback]}" : ''
 
 	server_cmd = if remotehost
-		"ssh #{remotehost} lvmsync --server #{snapback} #{remotedev}"
+		"ssh #{remotehost} lvmsync --apply - #{snapback} #{remotedev}"
 	else
-		"lvmsync --server #{snapback} #{remotedev}"
+		"lvmsync --apply - #{snapback} #{remotedev}"
 	end
 		
 	IO.popen(server_cmd, 'w') do |remoteserver|
@@ -202,21 +201,6 @@ def run_client(opts)
 	
 	puts "Transferred #{xfer_count} of #{total_size} chunks (#{chunksize} bytes per chunk)"
 	puts "You saved #{(total_size - xfer_count) / total_size.to_f * 100}% of your transfer size!"
-end
-
-def run_apply(opts)
-	snapfile = opts[:snapfile]
-	device = opts[:device]
-	
-	File.open(snapfile, 'r') do |snapfd|
-		handshake = snapfd.readline.chomp
-		unless handshake == PROTOCOL_VERSION
-			$stderr.puts "Handshake failed; protocol mismatch? (saw '#{handshake}' expected '#{PROTOCOL_VERSION}'"
-			exit 1
-		end
-	
-		process_dumpdata(snapfd, device, nil)
-	end
 end
 
 # Call dmsetup ls and turn that into a hash of dm_name => [maj, min] data.
