@@ -1,0 +1,59 @@
+#!/bin/bash
+
+set -e
+set -x
+
+# Must run as root, because we're doing LVM manipulation
+if [ "$EUID" != "0" ]; then
+	echo "Must run this testsuite as root" >&2
+	exit 1
+fi
+
+# Make sure there aren't any remnant lvmsync test LVs from a previous test
+# run that bombed unceremoniously.  Since we don't want to nuke *anything*
+# without being sure, we'll just exit and ask the user to cleanup manually.
+if lvs --noheadings -o lv_name | grep -q '__lvmsynctest'; then
+	cat <<EOF >&2
+ERROR: There appear to be some test LVs that this test suite didn't clean up
+previously.  I'm not going to delete them myself, in case you created them
+deliberately.  Check that the following LVs aren't something you want to keep,
+and then delete them:
+
+$(lvs --noheadings -o lv_name | grep '__lvmsynctest')
+EOF
+	exit 1
+fi
+
+# We'll be nice and pick the VG with the largest free space.
+VG="$(vgs --noheadings -o vg_name --sort -vg_free | sed 's/ //g')"
+
+if [ -z "$VG" ]; then
+	cat <<EOF >&2
+No Volume Groups found.  You must run this test suite on a machine that is
+running LVM.
+EOF
+	exit 1
+fi
+
+# Make sure we've got enough space -- we'll be creating up to four LVs, each
+# up to five extents in size.  So we'll need at least 20 free extents. 
+VGFREE="$(vgs --noheadings -o vg_free_count $VG)"
+
+if (($VGFREE < 20)); then
+	cat <<EOF >&2
+Insufficient free space in VG $VG.  Please ensure at least one volume group
+on your system has 20 free extents.
+EOF
+	exit 1
+fi
+
+# Now we run our tests
+HERE="$(dirname $(readlink -f $0))"
+
+for i in $HERE/[0-9][0-9]*; do
+	. $i
+done
+
+# Since our tests will exit immediately if there was a problem, if we've
+# gotten here then we've won!
+echo "ALL TESTS PASSED"
