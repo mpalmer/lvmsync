@@ -16,7 +16,7 @@ dd if=/dev/$VG/__lvmsynctest_src of=/dev/$VG/__lvmsynctest_dest bs=1M
 
 # Write in some gibberish at intervals across the LV
 i=0
-while dd if=/dev/urandom of=/dev/$VG/__lvmsynctest_src bs=512 count=1 seek=$(($i*2048)); do
+while dd if=/dev/urandom of=/dev/$VG/__lvmsynctest_src bs=512 count=1 seek=$(($i*2048)) >/dev/null 2>&1; do
 	i=$(($i+1))
 done
 
