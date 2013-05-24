@@ -1,10 +1,10 @@
 #!/usr/bin/ruby
 
-# Transfer a set of changes made to the origin of a snapshot LV to a block
-# device on a remote system.
+# Transfer a set of changes made to the origin of a snapshot LV to another
+# block device, possibly using SSH to send to a remote system.
 #
 # Usage: Start with lvmsync --help, or read the README for all the gory
-# details
+# details.
 #
 
 require 'optparse'
@@ -17,19 +17,25 @@ def main()
 	OptionParser.new do |opts|
 		opts.banner = "Usage: lvmsync [options]"
 		opts.separator ""
-		opts.separator "    lvmsync [--snapback <file>] <snapshot device> [<remotehost>:]<remotedevice>"
-		opts.separator "    lvmsync --apply <changes file> <destdevice>"
+		opts.separator "    lvmsync [--snapback <file>] <snapshot device> [--stdout | <desthost>:]<destdevice>]"
+		opts.separator "    lvmsync [--snapback <file>] --apply <changes file> <destdevice>"
 		opts.separator ""
 		
 		opts.on("--server", "Run in server mode (deprecated; use '--apply -' instead)") do |v|
 			options[:server] = true
 		end
-		opts.on("-v", "--[no-]verbose", "Run verbosely") { |v| options[:verbose] = true }
-		opts.on("-b <file>", "--snapback <file>", "Make a backup snapshot file on the destination") do |v|
+		opts.on("-v", "--[no-]verbose",
+		        "Run verbosely") { |v| options[:verbose] = true }
+		opts.on("-b <file>", "--snapback <file>",
+		        "Make a backup snapshot file on the destination") do |v|
 			options[:snapback] = v
 		end
-		opts.on("-a", "--apply", "Apply mode: write the contents of a snapback file to a device") do |v|
+		opts.on("-a", "--apply",
+		        "Apply mode: write the contents of a snapback file to a device") do |v|
 			options[:apply] = true
+		end
+		opts.on("-s", "--stdout", "Write output data to stdout rather than another lvmsync process") do |v|
+			options[:stdout] = true
 		end
 	end.parse!
 	
@@ -59,15 +65,18 @@ def main()
 			$stderr.puts "ERROR: No snapshot specified.  Exiting."
 			exit 1
 		end
-	
-		if (ARGV[1].nil?)
+		options[:snapdev] = ARGV[0]
+
+		if (options[:stdout].nil? and ARGV[1].nil?)
 			$stderr.puts "No destination specified."
 			exit 1
 		end
-		dev, host = ARGV[1].split(':', 2).reverse
-		options[:snapdev] = ARGV[0]
-		options[:desthost] = host
-		options[:destdev] = dev
+		if options[:stdout].nil?
+			dev, host = ARGV[1].split(':', 2).reverse
+			options[:desthost] = host
+			options[:destdev] = dev
+		end
+
 		run_client(options)
 	end
 end
@@ -107,8 +116,9 @@ end
 
 def run_client(opts)
 	snapshot = opts[:snapdev]
-	remotehost = opts[:desthost]
-	remotedev = opts[:destdev]
+	desthost = opts[:desthost]
+	destdev = opts[:destdev]
+	outfd = nil
 	
 	snapshotdm = canonicalise_dm(snapshot)
 
@@ -133,7 +143,7 @@ def run_client(opts)
 		exit 1
 	end
 
-	puts "Found origin dm device: #{origindm}" if opts[:verbose]
+	$stderr.puts "Found origin dm device: #{origindm}" if opts[:verbose]
 	
 	exceptiondm = dm_from_devnum(dmtable[snapshotdm][0][:args][1], dmlist)
 	
@@ -149,58 +159,65 @@ def run_client(opts)
 	# PERFORMANCE WIN!
 	File.open("/proc/sys/vm/drop_caches", 'w') { |fd| fd.print "3" }
 
-	puts "Reading snapshot metadata from /dev/mapper/#{exceptiondm}" if opts[:verbose]
-	puts "Reading changed chunks from /dev/mapper/#{origindm}" if opts[:verbose]
+	$stderr.puts "Reading snapshot metadata from /dev/mapper/#{exceptiondm}" if opts[:verbose]
+	$stderr.puts "Reading changed chunks from /dev/mapper/#{origindm}" if opts[:verbose]
 
 	xfer_count = 0
 	total_size = 0
 	chunksize = nil
 	snapback = opts[:snapback] ? "--snapback #{opts[:snapback]}" : ''
 
-	server_cmd = if remotehost
-		"ssh #{remotehost} lvmsync --apply - #{snapback} #{remotedev}"
+	if opts[:stdout]
+		outfd = $stdout
 	else
-		"lvmsync --apply - #{snapback} #{remotedev}"
-	end
-		
-	IO.popen(server_cmd, 'w') do |remoteserver|
-		remoteserver.puts PROTOCOL_VERSION
-	
-		File.open("/dev/mapper/#{origindm}", 'r') do |origindev|
-			File.open("/dev/mapper/#{exceptiondm}", 'r') do |snapdev|
-				chunksize = read_header(snapdev)
-				
-				snapdev.seek chunksize
-				in_progress = true
-				t = Time.now
-				while in_progress
-					(chunksize / 16).times do
-						origin_offset, snap_offset = snapdev.read(16).unpack("QQ")
-						origin_offset = ntohq(origin_offset)
-						snap_offset = ntohq(snap_offset)
-						if snap_offset == 0
-							in_progress = false
-							break
-						end
-						xfer_count += 1
-						puts "Sending chunk #{origin_offset}" if opts[:verbose]
-						origindev.seek origin_offset * chunksize
-						remoteserver.print [htonq(origin_offset), chunksize].pack("QN")
-						remoteserver.print origindev.read(chunksize)
-					end
-					snapdev.seek chunksize * chunksize / 16, IO::SEEK_CUR if in_progress
-					printf "\r%iB/s", chunksize / (Time.now - t)
-					$stdout.flush
-					t = Time.now
-				end
-			end
-			origindev.seek(0, IO::SEEK_END)
-			total_size = origindev.tell / 4096
+		server_cmd = if desthost
+			"ssh #{desthost} lvmsync --apply - #{snapback} #{destdev}"
+		else
+			"lvmsync --apply - #{snapback} #{destdev}"
 		end
+		
+		outfd = IO.popen(server_cmd, 'w')
 	end
 	
-	puts "Transferred #{xfer_count} of #{total_size} chunks (#{chunksize} bytes per chunk)"
-	puts "You saved #{(total_size - xfer_count) / total_size.to_f * 100}% of your transfer size!"
+	outfd.puts PROTOCOL_VERSION
+	
+	File.open("/dev/mapper/#{origindm}", 'r') do |origindev|
+		File.open("/dev/mapper/#{exceptiondm}", 'r') do |snapdev|
+			chunksize = read_header(snapdev)
+				
+			snapdev.seek chunksize
+			in_progress = true
+			t = Time.now
+			while in_progress
+				(chunksize / 16).times do
+					origin_offset, snap_offset = snapdev.read(16).unpack("QQ")
+					origin_offset = ntohq(origin_offset)
+					snap_offset = ntohq(snap_offset)
+					if snap_offset == 0
+						in_progress = false
+						break
+					end
+					xfer_count += 1
+					$stderr.puts "Sending chunk #{origin_offset}" if opts[:verbose]
+					origindev.seek origin_offset * chunksize
+					outfd.print [htonq(origin_offset), chunksize].pack("QN")
+					outfd.print origindev.read(chunksize)
+				end
+				snapdev.seek chunksize * chunksize / 16, IO::SEEK_CUR if in_progress
+				$stderr.printf "\r%iB/s", chunksize / (Time.now - t)
+				$stderr.flush
+				t = Time.now
+			end
+		end
+		origindev.seek(0, IO::SEEK_END)
+		total_size = origindev.tell / 4096
+	end
+	
+	$stderr.puts "Transferred #{xfer_count} of #{total_size} chunks (#{chunksize} bytes per chunk)"
+	$stderr.puts "You saved #{(total_size - xfer_count) / total_size.to_f * 100}% of your transfer size!"
+ensure
+	outfd.close unless outfd.nil? or outfd == $stdout
+	
 end
 
 # Call dmsetup ls and turn that into a hash of dm_name => [maj, min] data.

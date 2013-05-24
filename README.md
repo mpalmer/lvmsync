@@ -206,6 +206,38 @@ As an aside, if you're trying to move LVs between PVs in the same VG, then
 you don't need `lvmsync`, you need `pvmove`.
 
 
+### Taking a space- and IO-efficient snapshot of an LV
+
+But wait, there's more!  `lvmsync` also has the ability to dump out the
+snapshot data to disk, rather than immediately applying it to another block
+device.
+
+To do this, use the `--pipe` option when you're running `lvmsync`, and
+instead of writing the changes to another block device, it'll instead dump
+the "change stream" to stdout (so redirect somewhere useful).  This allows
+you to dump the changes to a file, or do some sort of fancy footwork to
+transfer the data to another lvmsync process to apply the changes to a block
+device.
+
+For example, if you just wanted to take a copy of the contents of a
+snapshot, you could do something like this:
+
+    lvmsync --pipe /dev/somevg/somelv-snapshot >~/somechanges
+
+At a later date, if you wanted to apply those writes to a block device,
+you'd do it like this:
+
+    lvmsync --apply ~/somechanges /dev/somevg/someotherlv
+
+You can also do things like do an lvmsync *from* the destination -- this is
+useful if (for example) you can SSH from the destination to the source
+machine, but not the other way around (fkkn firewalls, how do they work?). 
+You could do this by running something like the following on the destination
+machine:
+
+    ssh srcmachine lvmsync --pipe /dev/srcvg/srclv-snap | lvmsync --apply - /dev/destvg/destlv
+
+
 ## Theory of Operation
 
 This section is for those people who can't sleep well at night without
