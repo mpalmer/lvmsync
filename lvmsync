@@ -17,7 +17,7 @@ def main()
 	OptionParser.new do |opts|
 		opts.banner = "Usage: lvmsync [options]"
 		opts.separator ""
-		opts.separator "    lvmsync [--snapback <file>] <snapshot device> [--stdout | <desthost>:]<destdevice>]"
+		opts.separator "    lvmsync [--snapback <file>] <snapshot device> [--stdout | [<desthost>:]<destdevice>]"
 		opts.separator "    lvmsync [--snapback <file>] --apply <changes file> <destdevice>"
 		opts.separator ""
 		
