@@ -30,9 +30,9 @@ def main()
 		        "Make a backup snapshot file on the destination") do |v|
 			options[:snapback] = v
 		end
-		opts.on("-a", "--apply",
+		opts.on("-a", "--apply <file>",
 		        "Apply mode: write the contents of a snapback file to a device") do |v|
-			options[:apply] = true
+			options[:apply] = v
 		end
 		opts.on("-s", "--stdout", "Write output data to stdout rather than another lvmsync process") do |v|
 			options[:stdout] = true
@@ -41,15 +41,10 @@ def main()
 	
 	if options[:apply]
 		if ARGV[0].nil?
-			$stderr.puts "No snapback file specified."
-			exit 1
-		end
-		if ARGV[1].nil?
 			$stderr.puts "No destination device specified."
 			exit 1
 		end
-		options[:infile] = ARGV[0]
-		options[:device] = ARGV[1]
+		options[:device] = ARGV[0]
 		run_apply(options)
 	elsif options[:server]
 		$stderr.puts "--server is deprecated; please use '--apply -' instead"
@@ -57,7 +52,7 @@ def main()
 			$stderr.puts "No destination block device specified.  WTF?"
 			exit 1
 		end
-		options[:infile] = '-'
+		options[:apply] = '-'
 		options[:device] = ARGV[0]
 		run_apply(options)
 	else
@@ -83,7 +78,7 @@ end
 
 def run_apply(opts)
 	snapfile = opts[:snapback] ? File.open(opts[:snapback], 'w') : nil
-	infile   = opts[:infile] == '-' ? $stdin : File.open(opts[:infile], 'r')
+	infile   = opts[:apply] == '-' ? $stdin : File.open(opts[:apply], 'r')
 	destdev  = opts[:device]
 	
 	process_dumpdata(infile, destdev, snapfile)
