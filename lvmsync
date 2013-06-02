@@ -176,10 +176,12 @@ def run_client(opts)
 	
 	outfd.puts PROTOCOL_VERSION
 	
+	start_time = Time.now
 	File.open("/dev/mapper/#{origindm}", 'r') do |origindev|
 		File.open("/dev/mapper/#{exceptiondm}", 'r') do |snapdev|
 			chunksize = read_header(snapdev)
-				
+			origin_offset = nil
+			
 			snapdev.seek chunksize
 			in_progress = true
 			t = Time.now
@@ -199,7 +201,10 @@ def run_client(opts)
 					outfd.print origindev.read(chunksize)
 				end
 				snapdev.seek chunksize * chunksize / 16, IO::SEEK_CUR if in_progress
-				$stderr.printf "\r%iB/s", chunksize / (Time.now - t)
+				$stderr.printf "\e[2K\rSending chunk %i (origin device offset %i), %.2fMB/s",
+				               xfer_count,
+				               origin_offset * chunksize,
+				               chunksize * 16 / (Time.now - t) / 1048576
 				$stderr.flush
 				t = Time.now
 			end
@@ -208,8 +213,11 @@ def run_client(opts)
 		total_size = origindev.tell / 4096
 	end
 	
-	$stderr.puts "Transferred #{xfer_count} of #{total_size} chunks (#{chunksize} bytes per chunk)"
-	$stderr.puts "You saved #{(total_size - xfer_count) / total_size.to_f * 100}% of your transfer size!"
+	$stderr.printf "\rTransferred %i of %i chunks (%i bytes per chunk) in %.2f seconds\n",
+	               xfer_count, total_size, chunksize, Time.now - start_time
+	               
+	$stderr.printf "You transferred your changes %.2fx faster than a full dd!\n",
+	               total_size.to_f / xfer_count
 ensure
 	outfd.close unless outfd.nil? or outfd == $stdout
 	
