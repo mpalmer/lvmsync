@@ -34,6 +34,10 @@ def main()
 		        "Apply mode: write the contents of a snapback file to a device") do |v|
 			options[:apply] = v
 		end
+		opts.on("-o", "--origin <file>",
+		        "Specify alternative origin where source should be read from (not snapshot parent)") do |v|
+			options[:origin] = v
+		end
 		opts.on("-s", "--stdout", "Write output data to stdout rather than another lvmsync process") do |v|
 			options[:stdout] = true
 		end
@@ -113,6 +117,7 @@ def run_client(opts)
 	snapshot = opts[:snapdev]
 	desthost = opts[:desthost]
 	destdev = opts[:destdev]
+	origin = opts[:origin]
 	outfd = nil
 	
 	snapshotdm = canonicalise_dm(snapshot)
@@ -131,8 +136,25 @@ def run_client(opts)
 		exit 1
 	end
 	
-	origindm = dm_from_devnum(dmtable[snapshotdm][0][:args][0], dmlist)
-	
+	if origin.nil?
+		origindm = dm_from_devnum(dmtable[snapshotdm][0][:args][0], dmlist)
+	else
+		origindm = canonicalise_dm(origin)
+		if dmlist[origindm].nil?
+			$stderr.puts "origin: Could not find dm device '#{origin}' (name mangled to '#{snapshotdm}')"
+			exit 1
+		end
+		
+		if dmtable[origindm][0][:type] != 'snapshot'
+			$stderr.puts "origin: #{origin} does not appear to be a snapshot"
+			exit 1
+		end
+		if dm_from_devnum(dmtable[snapshotdm][0][:args][0], dmlist) != dm_from_devnum(dmtable[origindm][0][:args][0], dmlist)
+			$stderr.puts "#{snapshot} and #{origin} do not have the same parent"
+			exit 1
+		end
+		
+	end
 	if origindm.nil?
 		$stderr.puts "CAN'T HAPPEN: No origin device for #{snapshot} found"
 		exit 1
