@@ -98,7 +98,23 @@ def process_dumpdata(instream, destdev, snapback = nil)
 		while header = instream.read(12)
 			offset, chunksize = header.unpack("QN")
 			offset = ntohq(offset)
-			dest.seek offset * chunksize
+			
+			begin
+				dest.seek offset * chunksize
+			rescue Errno::EINVAL
+				# In certain rare circumstances, we want to transfer a block
+				# device where the destination is smaller than the source (DRBD
+				# volumes is the canonical use case).  So, we ignore attempts to
+				# seek past the end of the device.  Yes, this may lose data, but
+				# if you didn't notice that your dd shit itself, it's unlikely
+				# you're going to notice now.
+				
+				# Skip the chunk of data
+				instream.read(chunksize)
+				# Go to the next chunk
+				next
+			end
+			
 			if snapback
 				snapback.write(header)
 				snapback.write dest.read(chunksize)
