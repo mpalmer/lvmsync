@@ -110,7 +110,7 @@ commands should be run on `vmsrv1`:
     # happening the VM is still serving traffic.  pv is a great tool for
     # showing you how fast your data's moving, but you can leave it out of
     # the pipeline if you don't have it installed.
-    dd if=/dev/vmsrv1/somevm bs=1M | pv -ptrb | ssh root@vmsrv2 dd of=/dev/vmsrv2/somevm
+    dd if=/dev/vmsrv1/somevm bs=1M | pv -ptrb | ssh root@vmsrv2 dd of=/dev/vmsrv2/somevm bs=1M
 
     # Shutdown the VM -- the command you use will probably vary
     virsh shutdown somevm
