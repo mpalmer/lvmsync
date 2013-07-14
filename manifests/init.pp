@@ -1,7 +1,7 @@
 class lvmsync {
 	file { "/usr/local/sbin/lvmsync":
 		ensure  => present,
-		content => template("lvmsync/lvmsync"),
+		source  => "puppet:///lvmsync/lvmsync",
 		mode    => 0555,
 		owner   => root,
 		group   => root
