@@ -6,7 +6,17 @@
 # Usage: Start with lvmsync --help, or read the README for all the gory
 # details.
 #
-
+# Copyright (C) 2011-2013 Matt Palmer <matt@hezmatt.org>
+#
+# This program is free software: you can redistribute it and/or modify it
+# under the terms of the GNU General Public License version 3, as published
+# by the Free Software Foundation.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# `LICENCE` file for more details.
+#
 require 'optparse'
 
 PROTOCOL_VERSION = "lvmsync PROTO[2]"
