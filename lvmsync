@@ -72,6 +72,11 @@ def main()
 		end
 		options[:snapdev] = ARGV[0]
 
+		if options[:stdout] and options[:snapback]
+			$stderr.puts "--snapback cannot be used with --stdout"
+			exit 1
+		end
+
 		if (options[:stdout].nil? and ARGV[1].nil?)
 			$stderr.puts "No destination specified."
 			exit 1
