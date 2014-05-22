@@ -10,7 +10,7 @@ lvcreate -l 5 -n __lvmsynctest_dest $VG
 dd if=/dev/urandom of=/dev/$VG/__lvmsynctest_src bs=1M || true
 
 # Snapshot
-lvcreate --snapshot $VG/__lvmsynctest_src -l 5 -n __lvmsynctest_snap 
+lvcreate --snapshot $VG/__lvmsynctest_src -l 5 -n __lvmsynctest_snap
 
 # Initial copy
 dd if=/dev/$VG/__lvmsynctest_src of=/dev/$VG/__lvmsynctest_dest bs=1M

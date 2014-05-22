@@ -33,7 +33,7 @@ def main()
 		opts.separator "    lvmsync [--snapback <file>] <snapshot device> [--stdout | [<desthost>:]<destdevice>]"
 		opts.separator "    lvmsync [--snapback <file>] --apply <changes file> <destdevice>"
 		opts.separator ""
-		
+
 		opts.on("--server", "Run in server mode (deprecated; use '--apply -' instead)") do |v|
 			options[:server] = true
 		end
@@ -51,7 +51,7 @@ def main()
 			options[:stdout] = true
 		end
 	end.parse!
-	
+
 	if options[:apply]
 		if ARGV[0].nil?
 			$stderr.puts "No destination device specified."
@@ -98,7 +98,7 @@ def run_apply(opts)
 	snapfile = opts[:snapback] ? File.open(opts[:snapback], 'w') : nil
 	infile   = opts[:apply] == '-' ? $stdin : File.open(opts[:apply], 'r')
 	destdev  = opts[:device]
-	
+
 	process_dumpdata(infile, destdev, snapfile)
 ensure
 	snapfile.close unless snapfile.nil?
@@ -116,7 +116,7 @@ def process_dumpdata(instream, destdev, snapback = nil)
 		while header = instream.read(12)
 			offset, chunksize = header.unpack("QN")
 			offset = ntohq(offset)
-			
+
 			begin
 				dest.seek offset * chunksize
 			rescue Errno::EINVAL
@@ -126,13 +126,13 @@ def process_dumpdata(instream, destdev, snapback = nil)
 				# seek past the end of the device.  Yes, this may lose data, but
 				# if you didn't notice that your dd shit itself, it's unlikely
 				# you're going to notice now.
-				
+
 				# Skip the chunk of data
 				instream.read(chunksize)
 				# Go to the next chunk
 				next
 			end
-			
+
 			if snapback
 				snapback.write(header)
 				snapback.write dest.read(chunksize)
@@ -148,16 +148,16 @@ def run_client(opts)
 	desthost = opts[:desthost]
 	destdev = opts[:destdev]
 	outfd = nil
-	
+
 	vg, lv = parse_snapshot_name(snapshot)
 
 	vgconfig = LVM::VGConfig.new(vg)
-	
+
 	if vgconfig.logical_volumes[lv].nil?
 		$stderr.puts "#{snapshot}: Could not find logical volume"
 		exit 1
 	end
-	
+
 	snap = if vgconfig.logical_volumes[lv].snapshot?
 		if vgconfig.logical_volumes[lv].thin?
 			LVM::ThinSnapshot.new(vg, lv)
@@ -170,11 +170,11 @@ def run_client(opts)
 	end
 
 	$stderr.puts "Origin device: #{vg}/#{snap.origin}" if opts[:verbose]
-	
+
 	# Since, in principle, we're not supposed to be reading from snapshot
 	# devices directly, the kernel makes no attempt to make the device's read
 	# cache stay in sync with the actual state of the device.  As a result,
-	# we have to manually drop all caches before the data looks consistent. 
+	# we have to manually drop all caches before the data looks consistent.
 	# PERFORMANCE WIN!
 	File.open("/proc/sys/vm/drop_caches", 'w') { |fd| fd.print "3" }
 
@@ -188,12 +188,12 @@ def run_client(opts)
 		else
 			"lvmsync --apply - #{snapback} #{destdev}"
 		end
-		
+
 		outfd = IO.popen(server_cmd, 'w')
 	end
-	
+
 	outfd.puts PROTOCOL_VERSION
-	
+
 	start_time = Time.now
 	xfer_count = 0
 	xfer_size  = 0
@@ -205,10 +205,10 @@ def run_client(opts)
 			xfer_count += 1
 			chunk_size = r.last - r.first + 1
 			xfer_size  += chunk_size
-			
+
 			$stderr.puts "Sending chunk #{r.to_s}..." if opts[:verbose]
 			$stderr.puts "Seeking to #{r.first} in #{originfile}" if opts[:verbose]
-			
+
 			origindev.seek(r.first, IO::SEEK_SET)
 
 			outfd.print [htonq(r.first), chunk_size].pack("QN")
@@ -230,7 +230,7 @@ def run_client(opts)
 
 	$stderr.printf "\rTransferred %i bytes in %.2f seconds\n",
 	               xfer_size, Time.now - start_time
-	               
+
 	$stderr.printf "You transferred your changes %.2fx faster than a full dd!\n",
 	               total_size.to_f / xfer_size
 ensure

@@ -114,11 +114,11 @@ commands should be run on `vmsrv1`:
 
     # Shutdown the VM -- the command you use will probably vary
     virsh shutdown somevm
-    
+
     # Once it's shutdown and the block device isn't going to be written to
     # any more, then you can run lvmsync
     lvmsync /dev/vmsrv1/somevm-lvmsync vmsrv2:/dev/vmsrv2/somevm
-    
+
     # You can now start up the VM on vmsrv2, after a fairly small period of
     # downtime.  Once you're done, you can remove the snapshot and,
     # presumably, the LV itself, from `vmsrv1`
@@ -231,7 +231,7 @@ you'd do it like this:
 
 You can also do things like do an lvmsync *from* the destination -- this is
 useful if (for example) you can SSH from the destination to the source
-machine, but not the other way around (fkkn firewalls, how do they work?). 
+machine, but not the other way around (fkkn firewalls, how do they work?).
 You could do this by running something like the following on the destination
 machine:
 
@@ -248,7 +248,7 @@ order to work lvmsync.
 First, a little bit of background about how snapshot LVs work, before I
 describe how lvmsync makes use of them.
 
-An LVM snapshot "device" is actually not a block device in the usual sense. 
+An LVM snapshot "device" is actually not a block device in the usual sense.
 It isn't just a big area of disk space where you write things.  Instead, it
 is a "meta" device, which points to both an "origin" LV, which is the LV
 from which the snapshot was made, and a "metadata" LV, which is where the

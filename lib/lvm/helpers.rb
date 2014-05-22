@@ -13,6 +13,6 @@ module LVM::Helpers
 	end
 
 	def ntohq val
-		htonq val 
+		htonq val
 	end
 end

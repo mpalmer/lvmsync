@@ -69,19 +69,19 @@ class LVM::ThinSnapshot
 			diff_maps = ((flat_origin_blocklist - flat_snapshot_blocklist) +
 							 (flat_snapshot_blocklist - flat_origin_blocklist)
 							).uniq
-			
+
 			# At this point, we're off to a good start -- we've got the mappings
 			# that are different.  But we're not actually interested in the
 			# mappings themselves -- all we want is "the list of LV blocks which
 			# are different" (we'll translate LV blocks into byte ranges next).
 			#
 			changed_blocks = diff_maps.map { |m| m[0] }.uniq
-			
+
 			# Block-to-byte-range is pretty trivial, and we're done!
 			changed_blocks.map do |b|
 				((b*chunk_size)..(((b+1)*chunk_size)-1))
 			end
-			
+
 			# There is one optimisation we could make here that we haven't --
 			# coalescing adjacent byte ranges into single larger ranges.  I haven't
 			# done it for two reasons: Firstly, I don't have any idea how much of a
@@ -89,44 +89,44 @@ class LVM::ThinSnapshot
 			# to do it elegantly.  So I punted.
 		end
 	end
-	
+
 	def origin
 		@origin ||= vgcfg.logical_volumes[@lv].origin
 	end
-	
+
 	private
 	def vgcfg
 		@vgcfg ||= LVM::VGConfig.new(@vg)
 	end
-	
+
 	def flat_origin_blocklist
 		@flat_origin_blocklist ||= flatten_blocklist(origin_blocklist)
 	end
-	
+
 	def flat_snapshot_blocklist
 		@flat_snapshot_blocklist ||= flatten_blocklist(snapshot_blocklist)
 	end
-	
+
 	def origin_blocklist
 		@origin_blocklist ||= vg_block_dump[@vgcfg.logical_volumes[origin].device_id]
 	end
-	
+
 	def snapshot_blocklist
 		@snapshot_blocklist ||= vg_block_dump[@vgcfg.logical_volumes[@lv].device_id]
 	end
-	
+
 	def thin_pool_name
 		@thin_pool_name ||= vgcfg.logical_volumes[@lv].thin_pool
 	end
-	
+
 	def thin_pool
 		@thin_pool ||= vgcfg.logical_volumes[thin_pool_name]
 	end
-	
+
 	def chunk_size
 		@chunk_size ||= thin_pool.chunk_size
 	end
-	
+
 	# Take a hash of <block-or-range> => <block-or-range> elements and turn
 	# it into an array of [block, block] pairs -- any <range> => <range>
 	# elements get expanded out into their constituent <block> => <block>
@@ -138,9 +138,9 @@ class LVM::ThinSnapshot
 			if elem[0].is_a? Range
 				lv_blocks = elem[0].to_a
 				data_blocks = elem[1].to_a
-				
+
 				# This will now produce an array of two-element arrays, which
-				# will itself be inside the top-level array that we're mapping. 
+				# will itself be inside the top-level array that we're mapping.
 				# A flatten(1) at the end will take care of that problem,
 				# though.
 				lv_blocks.inject([]) { |a, v| a << [v, data_blocks[a.length]] }
@@ -155,14 +155,14 @@ class LVM::ThinSnapshot
 			end
 		end.flatten(1)
 	end
-	
+
 	def vg_block_dump
 		@vg_block_dump ||= begin
 			doc = REXML::Document.new(`thin_dump /dev/mapper/#{@vg.gsub('-', '--')}-#{thin_pool_name.gsub('-','--')}_tmeta`)
-			
+
 			doc.elements['superblock'].inject({}) do |h, dev|
 				next h unless dev.node_type == :element
-				
+
 				maps = dev.elements[''].inject({}) do |h2, r|
 					next h2 unless r.node_type == :element
 

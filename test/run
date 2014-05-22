@@ -36,7 +36,7 @@ EOF
 fi
 
 # Make sure we've got enough space -- we'll be creating up to four LVs, each
-# up to five extents in size.  So we'll need at least 20 free extents. 
+# up to five extents in size.  So we'll need at least 20 free extents.
 VGFREE="$(vgs --noheadings -o vg_free_count $VG)"
 
 if (($VGFREE < 20)); then

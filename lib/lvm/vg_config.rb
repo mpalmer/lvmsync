@@ -23,31 +23,31 @@ class LVM::VGConfig
 			      "Cannot parse vgcfgbackup output: #{@parser.failure_reason}"
 		end
 	end
-	
+
 	def version
 		@version ||= @root.variable_value('version')
 	end
-	
+
 	def description
 		@description ||= @root.variable_value('description')
 	end
-	
+
 	def uuid
 		@uuid ||= volume_group.variable_value('id')
 	end
-	
+
 	def volume_group
 		@volume_group ||= @root.groups[@vg_name]
 	end
-	
+
 	def physical_volumes
 		@physical_volumes ||= volume_group.groups['physical_volumes'].groups.to_a.inject({}) { |h,v| h[v[0]] = LVM::PVConfig.new(v[1]); h }
 	end
-	
+
 	def logical_volumes
 		@logical_volumes ||= volume_group.groups['logical_volumes'].groups.to_a.inject({}) { |h,v| h[v[0]] = LVM::LVConfig.new(v[1], v[0], self); h }
 	end
-	
+
 	private
 	def vgcfgbackup_output
 		@vgcfgbackup_output ||= begin
@@ -58,13 +58,13 @@ class LVM::VGConfig
 					stdout = stdout_fd.read
 					stderr = stderr_fd.read
 					exit_status = thr.value
-				
+
 					if exit_status != 0
 						raise RuntimeError,
 						      "Failed to run vgcfgbackup: #{stdout}\n#{stderr}"
 					end
 				end
-				
+
 				File.read(tmpf.path)
 			end
 		end
