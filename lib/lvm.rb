@@ -1,0 +1,5 @@
+require 'lvm/helpers'
+require 'lvm/thin_snapshot'
+require 'lvm/snapshot'
+require 'lvm/lv_config'
+require 'lvm/vg_config'

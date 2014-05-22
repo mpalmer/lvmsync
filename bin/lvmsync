@@ -6,7 +6,7 @@
 # Usage: Start with lvmsync --help, or read the README for all the gory
 # details.
 #
-# Copyright (C) 2011-2013 Matt Palmer <matt@hezmatt.org>
+# Copyright (C) 2011-2014 Matt Palmer <matt@hezmatt.org>
 #
 # This program is free software: you can redistribute it and/or modify it
 # under the terms of the GNU General Public License version 3, as published
@@ -18,8 +18,11 @@
 # `LICENCE` file for more details.
 #
 require 'optparse'
+require 'lvm'
 
 PROTOCOL_VERSION = "lvmsync PROTO[2]"
+
+include LVM::Helpers
 
 def main()
 	# Parse me some options
@@ -146,51 +149,35 @@ def run_client(opts)
 	destdev = opts[:destdev]
 	outfd = nil
 	
-	snapshotdm = canonicalise_dm(snapshot)
+	vg, lv = parse_snapshot_name(snapshot)
 
-	# First, read the dm table so we can see what we're dealing with
-	dmtable = read_dm_table
-	dmlist = read_dm_list
-
-	if dmlist[snapshotdm].nil?
-		$stderr.puts "Could not find dm device '#{snapshot}' (name mangled to '#{snapshotdm}')"
-		exit 1
-	end
-
-	if dmtable[snapshotdm][0][:type] != 'snapshot'
-		$stderr.puts "#{snapshot} does not appear to be a snapshot"
+	vgconfig = LVM::VGConfig.new(vg)
+	
+	if vgconfig.logical_volumes[lv].nil?
+		$stderr.puts "#{snapshot}: Could not find logical volume"
 		exit 1
 	end
 	
-	origindm = dm_from_devnum(dmtable[snapshotdm][0][:args][0], dmlist)
-	
-	if origindm.nil?
-		$stderr.puts "CAN'T HAPPEN: No origin device for #{snapshot} found"
+	snap = if vgconfig.logical_volumes[lv].snapshot?
+		if vgconfig.logical_volumes[lv].thin?
+			LVM::ThinSnapshot.new(vg, lv)
+		else
+			LVM::Snapshot.new(vg, lv)
+		end
+	else
+		$stderr.puts "#{snapshot}: Not a snapshot device"
 		exit 1
 	end
 
-	$stderr.puts "Found origin dm device: #{origindm}" if opts[:verbose]
+	$stderr.puts "Origin device: #{vg}/#{snap.origin}" if opts[:verbose]
 	
-	exceptiondm = dm_from_devnum(dmtable[snapshotdm][0][:args][1], dmlist)
-	
-	if exceptiondm.nil?
-		$stderr.puts "CAN'T HAPPEN: No exception list device for #{snapshot} found!"
-		exit 1
-	end
-
-	# Since, in principle, we're not supposed to be reading from the CoW
-	# device directly, the kernel makes no attempt to make the device's read
+	# Since, in principle, we're not supposed to be reading from snapshot
+	# devices directly, the kernel makes no attempt to make the device's read
 	# cache stay in sync with the actual state of the device.  As a result,
 	# we have to manually drop all caches before the data looks consistent. 
 	# PERFORMANCE WIN!
 	File.open("/proc/sys/vm/drop_caches", 'w') { |fd| fd.print "3" }
 
-	$stderr.puts "Reading snapshot metadata from /dev/mapper/#{exceptiondm}" if opts[:verbose]
-	$stderr.puts "Reading changed chunks from /dev/mapper/#{origindm}" if opts[:verbose]
-
-	xfer_count = 0
-	total_size = 0
-	chunksize = nil
 	snapback = opts[:snapback] ? "--snapback #{opts[:snapback]}" : ''
 
 	if opts[:stdout]
@@ -208,150 +195,62 @@ def run_client(opts)
 	outfd.puts PROTOCOL_VERSION
 	
 	start_time = Time.now
-	File.open("/dev/mapper/#{origindm}", 'r') do |origindev|
-		File.open("/dev/mapper/#{exceptiondm}", 'r') do |snapdev|
-			chunksize = read_header(snapdev)
-			origin_offset = nil
+	xfer_count = 0
+	xfer_size  = 0
+	total_size = 0
+
+	originfile = "/dev/mapper/#{vg.gsub('-', '--')}-#{snap.origin.gsub('-', '--')}"
+	File.open(originfile, 'r') do |origindev|
+		snap.differences.each do |r|
+			xfer_count += 1
+			chunk_size = r.last - r.first + 1
+			xfer_size  += chunk_size
 			
-			snapdev.seek chunksize
-			in_progress = true
-			t = Time.now
-			while in_progress
-				(chunksize / 16).times do
-					origin_offset, snap_offset = snapdev.read(16).unpack("QQ")
-					origin_offset = ntohq(origin_offset)
-					snap_offset = ntohq(snap_offset)
-					if snap_offset == 0
-						in_progress = false
-						break
-					end
-					xfer_count += 1
-					$stderr.puts "Sending chunk #{origin_offset}" if opts[:verbose]
-					origindev.seek origin_offset * chunksize
-					outfd.print [htonq(origin_offset), chunksize].pack("QN")
-					outfd.print origindev.read(chunksize)
-				end
-				snapdev.seek chunksize * chunksize / 16, IO::SEEK_CUR if in_progress
-				$stderr.printf "\e[2K\rSending chunk %i (origin device offset %i), %.2fMB/s",
-				               xfer_count,
-				               origin_offset * chunksize,
-				               chunksize * 16 / (Time.now - t) / 1048576
+			$stderr.puts "Sending chunk #{r.to_s}..." if opts[:verbose]
+			$stderr.puts "Seeking to #{r.first} in #{originfile}" if opts[:verbose]
+			
+			origindev.seek(r.first, IO::SEEK_SET)
+
+			outfd.print [htonq(r.first), chunk_size].pack("QN")
+			outfd.print origindev.read(chunk_size)
+
+			# Progress bar!
+			if xfer_count % 100 == 50
+				$stderr.printf "\e[2K\rSending chunk %i of %i, %.2fMB/s",
+									xfer_count,
+									snap.differences.length,
+									xfer_size / (Time.now - start_time) / 1048576
 				$stderr.flush
-				t = Time.now
 			end
 		end
+
 		origindev.seek(0, IO::SEEK_END)
-		total_size = origindev.tell / 4096
+		total_size = origindev.tell
 	end
-	
-	$stderr.printf "\rTransferred %i of %i chunks (%i bytes per chunk) in %.2f seconds\n",
-	               xfer_count, total_size, chunksize, Time.now - start_time
+
+	$stderr.printf "\rTransferred %i bytes in %.2f seconds\n",
+	               xfer_size, Time.now - start_time
 	               
 	$stderr.printf "You transferred your changes %.2fx faster than a full dd!\n",
-	               total_size.to_f / xfer_count
+	               total_size.to_f / xfer_size
 ensure
 	outfd.close unless outfd.nil? or outfd == $stdout
-	
 end
 
-# Call dmsetup ls and turn that into a hash of dm_name => [maj, min] data.
-# Note that maj, min will be integers, and dm_name a string.
-def read_dm_list
-	dmlist = {}
-	`dmsetup ls`.split("\n").each do |l|
-		next unless l =~ /^(\S+)\s+\((\d+)(, |:)(\d+)\)$/
-		dmlist[$1] = [$2.to_i, $4.to_i]
-	end
-	dmlist
-end
-
-# Call dmsetup table and turn that into a complicated hash of dm table data.
-#
-# Structure is:
-#
-#   dm_name => [
-#     { :offset => int,
-#       :length => int,
-#       :type => (linear|snapshot|...),
-#       :args => [str, str, str]
-#     },
-#     { ... }
-#   ],
-#   dm_name => [ ... ]
-#
-# The arguments are kept as a list of strings (split on whitespace), and
-# you'll need to interpret them yourself.  Turning this whole shebang into a
-# class hierarchy is a task for another time.
-#
-def read_dm_table
-	dmtable = {}
-	`dmsetup table`.split("\n").each do |l|
-		next unless l =~ /^(\S+): (\d+) (\d+) (\S+) (.*)$/
-		dmtable[$1] ||= []
-		dmtable[$1] << { :offset => $2,
-		                 :length => $3,
-		                 :type => $4,
-		                 :args => $5.split(/\s+/)
-		               }
-	end
-	dmtable
-end
-
-# Take a device name in any number of different formats and turn it into a
-# "canonical" devicemapper name, equivalent to what you'll find in the likes
-# of dmsetup ls
-def canonicalise_dm(origname)
+# Take a device name in any number of different formats and return a [VG, LV] pair.
+# Raises ArgumentError if the name couldn't be parsed.
+def parse_snapshot_name(origname)
 	case origname
-		when %r{^/dev/mapper/(.+)$} then
-			$1
+		when %r{^/dev/mapper/(.*[^-])-([^-].*)$} then
+			[$1, $2]
 		when %r{^/dev/([^/]+)/(.+)$} then
-			vg = $1
-			lv = $2
-			vg.gsub('-', '--') +
-			'-' +
-			lv.gsub('-', '--')
+			[$1, $2]
 		when %r{^([^/]+)/(.*)$} then
-			vg = $1
-			lv = $2
-			vg.gsub('-', '--') +
-			'-' +
-			lv.gsub('-', '--')
+			[$1, $2]
 		else
-			# Let's *assume* that the user just gave us vg-lv...
-			origname
+			raise ArgumentError,
+			      "Could not determine snapshot name and VG from #{origname.inspect}"
 	end
 end
 
-# Find the name of a dm device that corresponds to the given <maj>:<min>
-# string provided.
-def dm_from_devnum(devnum, dmlist)
-	maj, min = devnum.split(':', 2)
-	dmlist.invert[[maj.to_i, min.to_i]]
-end
-
-# Read the header off our snapshot device, validate all is well, and return
-# the chunksize used by the snapshot, in bytes
-def read_header(snapdev)
-	magic, valid, metadata_version, chunksize = snapdev.read(16).unpack("VVVV")
-	raise RuntimeError.new("Invalid snapshot magic number") unless magic == 0x70416e53
-	raise RuntimeError.new("Snapshot marked as invalid") unless valid == 1
-	raise RuntimeError.new("Incompatible metadata version") unless metadata_version == 1
-	
-	# With all that out of the way, we can get down to business
-	chunksize * 512
-end
-
-# Are we on a big-endian system?  Needed for our htonq/ntohq methods
-def big_endian?
-	@bigendian ||= [1].pack("s") == [1].pack("n")
-end
-
-def htonq val
-	big_endian? ? ([val].pack("Q").reverse.unpack("Q").first) : val
-end
-
-def ntohq val
-	htonq val
-end
-
-main if __FILE__ == $0
+main

@@ -1,0 +1,37 @@
+grammar VgCfgBackup
+	rule config
+		(variable / group / space / comment)+ <Config>
+	end
+
+	rule variable
+		variable_name " = " (integer / string / list) <Variable>
+	end
+	
+	rule variable_name
+		[a-z0-9_]+ <VariableName>
+	end
+	
+	rule group
+		variable_name space "{" (variable / group / space / comment)+ "}" <Group>
+	end
+	
+	rule integer
+		[1-9] [0-9]* <Integer> / "0" <Integer>
+	end
+	
+	rule string
+		'"' [^"]* '"' <String>
+	end
+	
+	rule list
+		"[" space? ((string / integer) ", " / (string / integer))* space? "]" <List>
+	end
+	
+	rule space
+		[\s]+
+	end
+	
+	rule comment
+		"#" [^\n]*
+	end
+end

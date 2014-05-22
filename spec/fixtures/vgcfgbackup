@@ -1,0 +1,16 @@
+#!/bin/sh
+
+# Dumb test script to copy a dummy vgcfgbackup output file to where it
+# should be.  Must be called as "$0 -f <output> <vgname>", and
+# .../spec/fixtures/<vgname> will be copied to <output>.
+
+set -e
+
+HERE="$(dirname $(readlink -f $0))"
+
+if [ "$#" != "3" ] || [ "$1" != "-f" ]; then
+	echo "Called incorrectly"
+	exit 1
+fi
+
+cp "$HERE/$3" "$2"

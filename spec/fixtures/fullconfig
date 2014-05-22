@@ -1,0 +1,237 @@
+contents = "Text Format Volume Group"
+version = 1
+
+description = "vgcfgbackup -f /tmp/faffen2"
+
+fullconfig {
+	id = "zAPMOi-5QlD-fp1M-FMgz-biha-TQIP-X9TfqX"
+	seqno = 436
+	format = "lvm2" # informational
+	status = ["RESIZEABLE", "READ", "WRITE"]
+	flags = []
+	extent_size = 8192		# 4 Megabytes
+	max_lv = 0
+	max_pv = 0
+	metadata_copies = 0
+
+	physical_volumes {
+
+		pv0 {
+			id = "j7ZiWs-1fHB-aAwq-yL29-pBOk-H4hR-AOIe0P"
+			device = "/dev/dm-0"	# Hint only
+
+			status = ["ALLOCATABLE"]
+			flags = []
+			dev_size = 1952545832	# 931.046 Gigabytes
+			pe_start = 384
+			pe_count = 238347	# 931.043 Gigabytes
+		}
+	}
+
+	logical_volumes {
+
+		swap {
+			id = "BOfqkb-V4jw-7cBX-UR3D-SN3f-wWvd-NwysSj"
+			status = ["READ", "WRITE", "VISIBLE"]
+			flags = []
+			segment_count = 1
+
+			segment1 {
+				start_extent = 0
+				extent_count = 2048	# 8 Gigabytes
+
+				type = "striped"
+				stripe_count = 1	# linear
+
+				stripes = [
+					"pv0", 0
+				]
+			}
+		}
+
+		root {
+			id = "8sbW3s-qB1u-6IlS-ABSj-PAMU-UxRk-I18ECh"
+			status = ["READ", "WRITE", "VISIBLE"]
+			flags = []
+			segment_count = 1
+
+			segment1 {
+				start_extent = 0
+				extent_count = 3840	# 15 Gigabytes
+
+				type = "striped"
+				stripe_count = 1	# linear
+
+				stripes = [
+					"pv0", 21504
+				]
+			}
+		}
+
+		thinpool {
+			id = "YzvLKN-ly3F-gNgL-2YUQ-7J4v-nPw6-aEH0Q4"
+			status = ["READ", "WRITE", "VISIBLE"]
+			flags = []
+			segment_count = 1
+
+			segment1 {
+				start_extent = 0
+				extent_count = 25600	# 100 Gigabytes
+
+				type = "thin-pool"
+				metadata = "thinpool_tmeta"
+				pool = "thinpool_tdata"
+				transaction_id = 13
+				chunk_size = 128	# 64 Kilobytes
+				discards = "passdown"
+				zero_new_blocks = 1
+			}
+		}
+
+		thintest {
+			id = "KTu6v0-XGcp-dJnd-5IFv-t1rH-fD6t-gqijyN"
+			status = ["READ", "WRITE", "VISIBLE"]
+			flags = []
+			segment_count = 1
+
+			segment1 {
+				start_extent = 0
+				extent_count = 2560	# 10 Gigabytes
+
+				type = "thin"
+				thin_pool = "thinpool"
+				transaction_id = 10
+				device_id = 1
+			}
+		}
+
+		thinsnap {
+			id = "ltQMX8-SaQV-S5fP-zF2m-wb78-bveG-JiCMnv"
+			status = ["READ", "WRITE", "VISIBLE"]
+			flags = ["ACTIVATION_SKIP"]
+			segment_count = 1
+
+			segment1 {
+				start_extent = 0
+				extent_count = 2560	# 10 Gigabytes
+
+				type = "thin"
+				thin_pool = "thinpool"
+				transaction_id = 11
+				device_id = 2
+				origin = "thintest"
+			}
+		}
+
+		thinsnap2 {
+			id = "E6Pa80-8PIh-GPAM-Qe6G-CRLc-rgeN-rno8pZ"
+			status = ["READ", "WRITE", "VISIBLE"]
+			flags = ["ACTIVATION_SKIP"]
+			segment_count = 1
+
+			segment1 {
+				start_extent = 0
+				extent_count = 2560	# 10 Gigabytes
+
+				type = "thin"
+				thin_pool = "thinpool"
+				transaction_id = 12
+				device_id = 3
+				origin = "thintest"
+			}
+		}
+
+		rootsnap {
+			id = "nzBjUt-ydUU-zytj-Crkm-5sCk-16aJ-fufe1C"
+			status = ["READ", "WRITE"]
+			flags = []
+			segment_count = 1
+
+			segment1 {
+				start_extent = 0
+				extent_count = 2560	# 10 Gigabytes
+
+				type = "striped"
+				stripe_count = 1	# linear
+
+				stripes = [
+					"pv0", 145433
+				]
+			}
+		}
+
+		lvol0_pmspare {
+			id = "81KshE-Cjpm-Ec2w-bHg9-imDu-dAD7-SzCULf"
+			status = ["READ", "WRITE"]
+			flags = []
+			segment_count = 1
+
+			segment1 {
+				start_extent = 0
+				extent_count = 25	# 100 Megabytes
+
+				type = "striped"
+				stripe_count = 1	# linear
+
+				stripes = [
+					"pv0", 2048
+				]
+			}
+		}
+
+		thinpool_tmeta {
+			id = "B8z5ds-mF2h-JfFb-pg4w-dNKA-6DUr-3sG58d"
+			status = ["READ", "WRITE"]
+			flags = []
+			segment_count = 1
+
+			segment1 {
+				start_extent = 0
+				extent_count = 25	# 100 Megabytes
+
+				type = "striped"
+				stripe_count = 1	# linear
+
+				stripes = [
+					"pv0", 145408
+				]
+			}
+		}
+
+		thinpool_tdata {
+			id = "gN0VJh-1k4l-DvcD-o3b2-dbSW-YL2P-Yq4sF0"
+			status = ["READ", "WRITE"]
+			flags = []
+			segment_count = 1
+
+			segment1 {
+				start_extent = 0
+				extent_count = 25600	# 100 Gigabytes
+
+				type = "striped"
+				stripe_count = 1	# linear
+
+				stripes = [
+					"pv0", 119808
+				]
+			}
+		}
+
+		snapshot0 {
+			id = "c1b4sb-GxW1-8P1A-pRO5-WgnT-6JtO-dnXIr1"
+			status = ["READ", "WRITE", "VISIBLE"]
+			flags = []
+			segment_count = 1
+
+			segment1 {
+				start_extent = 0
+				extent_count = 3840	# 15 Gigabytes
+
+				type = "snapshot"
+				chunk_size = 8
+				origin = "root"
+				cow_store = "rootsnap"
+			}
+		}
+	}
+}
