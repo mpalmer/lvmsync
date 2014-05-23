@@ -51,22 +51,27 @@ class LVM::VGConfig
 	private
 	def vgcfgbackup_output
 		@vgcfgbackup_output ||= begin
+			out = nil
+
 			Tempfile.open('vg_config') do |tmpf|
 				cmd = "#{@vgcfgbackup_cmd} -f #{tmpf.path} #{@vg_name}"
-				Open3.popen3(cmd) do |stdin_fd, stdout_fd, stderr_fd, thr|
+				stdout = nil
+				stderr = nil
+				Open3.popen3(cmd) do |stdin_fd, stdout_fd, stderr_fd|
 					stdin_fd.close
 					stdout = stdout_fd.read
 					stderr = stderr_fd.read
-					exit_status = thr.value
-
-					if exit_status != 0
-						raise RuntimeError,
-						      "Failed to run vgcfgbackup: #{stdout}\n#{stderr}"
-					end
 				end
 
-				File.read(tmpf.path)
+				if $?.exitstatus != 0
+					raise RuntimeError,
+					      "Failed to run vgcfgbackup: #{stdout}\n#{stderr}"
+				end
+
+				out = File.read(tmpf.path)
 			end
+
+			out
 		end
 	end
 end
