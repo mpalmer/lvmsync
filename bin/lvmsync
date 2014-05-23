@@ -1,4 +1,4 @@
-#!/usr/bin/ruby
+#!/usr/bin/env ruby
 
 # Transfer a set of changes made to the origin of a snapshot LV to another
 # block device, possibly using SSH to send to a remote system.
