@@ -6,9 +6,17 @@ module LVM; end
 class LVM::Snapshot
 	include LVM::Helpers
 
-	def initialize(vg, lv)
+	def initialize(vg, lv, source_lv = nil)
 		@vg = vg
 		@lv = lv
+		if source_lv
+			begin
+				@origin = vgcfg.logical_volumes[source_lv].name
+			rescue
+				raise RuntimeError,
+					"#{@vg}/#{@lv}: Unable to find source device #{@vg}/#{source_lv}"
+			end
+		end
 	end
 
 	# Return an array of ranges which are the bytes which are different
@@ -72,7 +80,7 @@ class LVM::Snapshot
 
 	def origin
 		# Man old-skool snapshots are weird
-		vgcfg.logical_volumes.values.find { |lv| lv.cow_store == @lv }.origin
+		@origin ||= vgcfg.logical_volumes.values.find { |lv| lv.cow_store == @lv }.origin
 	end
 
 	private

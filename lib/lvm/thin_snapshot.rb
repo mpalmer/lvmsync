@@ -3,9 +3,17 @@ require 'rexml/document'
 module LVM; end
 
 class LVM::ThinSnapshot
-	def initialize(vg, lv)
+	def initialize(vg, lv, source_lv = nil)
 		@vg = vg
 		@lv = lv
+		if source_lv
+			begin
+				@origin = vgcfg.logical_volumes[source_lv].name
+			rescue
+				raise RuntimeError,
+					"#{@vg}/#{@lv}: Unable to find source device #{@vg}/#{source_lv}"
+			end
+		end
 	end
 
 	# Return an array of ranges which are the bytes which are different
