@@ -8,7 +8,7 @@ grammar VgCfgBackup
 	end
 
 	rule variable_name
-		[a-z0-9_]+ <VariableName>
+		[a-z0-9_\-]+ <VariableName>
 	end
 
 	rule group
