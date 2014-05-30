@@ -172,7 +172,7 @@ class LVM::ThinSnapshot
 						len = r.attribute('length').value.to_i
 						ori = r.attribute('origin_begin').value.to_i
 						dat = r.attribute('data_begin').value.to_i
-						h2[(dat..dat+len-1)] = (ori..ori+len-1)
+						h2[(ori..ori+len-1)] = (dat..dat+len-1)
 					end
 
 					h2
