@@ -1,4 +1,3 @@
-require 'rexml/document'
 require 'lvm/helpers'
 
 module LVM; end

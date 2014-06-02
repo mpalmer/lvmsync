@@ -1,5 +1,3 @@
-require 'rexml/document'
-
 module LVM; end
 
 class LVM::ThinSnapshot
@@ -158,29 +156,50 @@ class LVM::ThinSnapshot
 
 	def vg_block_dump
 		@vg_block_dump ||= begin
-			doc = REXML::Document.new(`thin_dump /dev/mapper/#{@vg.gsub('-', '--')}-#{thin_pool_name.gsub('-','--')}_tmeta`)
+			device      = nil
+			ret         = {}
+			exit_status = nil
+			err         = nil
 
-			doc.elements['superblock'].inject({}) do |h, dev|
-				next h unless dev.node_type == :element
+			Open3.popen3("thin_dump /dev/mapper/#{@vg.gsub('-', '--')}-#{thin_pool_name.gsub('-','--')}_tmeta") do |i, o, e, t|
+				i.close
 
-				maps = dev.elements[''].inject({}) do |h2, r|
-					next h2 unless r.node_type == :element
-
-					if r.name == 'single_mapping'
-						h2[r.attribute('origin_block').value.to_i] = r.attribute('data_block').value.to_i
-					else
-						len = r.attribute('length').value.to_i
-						ori = r.attribute('origin_begin').value.to_i
-						dat = r.attribute('data_begin').value.to_i
-						h2[(dat..dat+len-1)] = (ori..ori+len-1)
+				while l = o.gets
+					if l =~ /<device dev_id="(\d+)".*>/
+						device = $1.to_i
+					elsif l =~ /<\/device>/
+						device = nil
 					end
 
-					h2
+					next if device.nil?
+
+					ret[device] = {} unless ret[device]
+
+					if l =~ /<(single|range)_mapping origin_\w+="(\d+)" data_\w+="(\d+)"( length="(\d+)")?.*\/>/
+						type   = $1
+						orig   = $2.to_i
+						data   = $3.to_i
+						length = $5.to_i
+
+						case type
+							when "single"
+								ret[device][orig] = data
+							when "range"
+								ret[device][orig..orig+length-1] = (data..data+length-1)
+						end
+					end
 				end
 
-				h[dev.attribute('dev_id').value.to_i] = maps
-				h
+				err         = e.read
+				exit_status = t.value if t
 			end
+
+			if ($? ? $?.exitstatus : exit_status) != 0
+				raise RuntimeError,
+					"Failed to run thin_dump: #{stderr}"
+			end
+
+			ret
 		end
 	end
 end
