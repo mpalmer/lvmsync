@@ -52,14 +52,21 @@ straight for the source code.
 
 ## Installation
 
-On the machine you're transferring from, you'll need have `dmsetup` and
-`ssh` installed and available on the PATH, and an installation of Ruby 1.8
-(or later).  Then just copy the `lvmsync` script to somewhere in root's
-PATH.
+To run `lvmsync`, you'll need to have a working installation of Ruby 1.8 (or
+later) on both the machine you're transferring from, and the machine you're
+transferring to.  On the source, you'll need `vgcfgbackup` (which is part of
+the core LVM2 toolset), and if you want to deal with thin snapshots, you'll
+also need `thin_dump` (which is part of the "thin provisioning tools" which
+are highly recommended for anyone working with thin-provisioned LVs).  For
+transferring dumps between machines, you'll need SSH installed and working
+between the two machines.
 
-On the machine you're transferring *to*, you'll need `sshd` installed and
-available for connection, and an installation of Ruby 1.8 (or later).  Then
-just copy the `lvmsync` script to somewhere in root's PATH.
+Installing `lvmsync` itself is easiest using Rubygems: `gem install
+lvmsync`.  This will install all the dependencies and (presumably) put the
+`lvmsync` command itself in root's PATH.  If for some reason you want to
+install it all by hand, you'll need to copy the contents of `lib/` into a
+directory in your Ruby library path, copy `bin/lvmsync` to somewhere on your
+PATH, and install the `treetop` and `git-version-bump` gems.
 
 
 ## How do I use it?
