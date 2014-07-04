@@ -108,6 +108,6 @@ class LVM::Snapshot
 	end
 
 	def metadata_device
-		"/dev/mapper/#{@vg}-#{@lv}-cow"
+		"/dev/mapper/#{@vg}-#{@lv.gsub('-', '--')}-cow"
 	end
 end
