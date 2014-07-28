@@ -54,16 +54,18 @@ class LVM::VGConfig
 			out = nil
 
 			Tempfile.open('vg_config') do |tmpf|
+				exit_status = nil
 				cmd = "#{@vgcfgbackup_cmd} -f #{tmpf.path} #{@vg_name}"
 				stdout = nil
 				stderr = nil
-				Open3.popen3(cmd) do |stdin_fd, stdout_fd, stderr_fd|
+				Open3.popen3(cmd) do |stdin_fd, stdout_fd, stderr_fd, wait_thr|
 					stdin_fd.close
 					stdout = stdout_fd.read
 					stderr = stderr_fd.read
+					exit_status = wait_thr.value.exitstatus
 				end
 
-				if $?.exitstatus != 0
+				if exit_status != 0
 					raise RuntimeError,
 					      "Failed to run vgcfgbackup: #{stdout}\n#{stderr}"
 				end
