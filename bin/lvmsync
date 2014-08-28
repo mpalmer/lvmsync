@@ -50,6 +50,10 @@ def main()
 		opts.on("-s", "--stdout", "Write output data to stdout rather than another lvmsync process") do |v|
 			options[:stdout] = true
 		end
+
+		opts.on("-e", "--sshcmd <command-string>", "Use specified command when invoking ssh") do |v|
+			options[:sshcmd] = v
+		end
 	end.parse!
 
 	if options[:apply]
@@ -179,12 +183,13 @@ def run_client(opts)
 	File.open("/proc/sys/vm/drop_caches", 'w') { |fd| fd.print "3" }
 
 	snapback = opts[:snapback] ? "--snapback #{opts[:snapback]}" : ''
+	sshcmd = opts[:sshcmd] ? "#{opts[:sshcmd]}" : 'ssh'
 
 	if opts[:stdout]
 		outfd = $stdout
 	else
 		server_cmd = if desthost
-			"ssh #{desthost} lvmsync --apply - #{snapback} #{destdev}"
+			"#{sshcmd} #{desthost} lvmsync --apply - #{snapback} #{destdev}"
 		else
 			"lvmsync --apply - #{snapback} #{destdev}"
 		end
