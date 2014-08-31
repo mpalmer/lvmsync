@@ -112,6 +112,10 @@ def process_dumpdata(instream, destdev, snapback = nil)
 		exit 1
 	end
 
+	if snapback
+		snapback.puts handshake
+	end
+
 	File.open(destdev, 'w+') do |dest|
 		while header = instream.read(12)
 			offset, chunksize = header.unpack("QN")
