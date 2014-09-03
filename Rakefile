@@ -13,6 +13,10 @@ require 'git-version-bump/rake-tasks'
 
 Bundler::GemHelper.install_tasks
 
+task :release do
+	sh "git release"
+end
+
 require 'rdoc/task'
 
 Rake::RDocTask.new do |rd|
