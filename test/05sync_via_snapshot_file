@@ -22,10 +22,10 @@ while dd if=/dev/urandom of=/dev/$VG/__lvmsynctest_src bs=512 count=1 seek=$(($i
 done
 
 # Now lvmsync -- dump to a file
-lvmsync /dev/$VG/__lvmsynctest_snap /dev/$VG/__lvmsynctest_dest --stdout >$HERE/,,snapshot_data_file || true
+$LVMSYNC /dev/$VG/__lvmsynctest_snap /dev/$VG/__lvmsynctest_dest --stdout >$HERE/,,snapshot_data_file || true
 
 # Apply from the file
-lvmsync --apply $HERE/,,snapshot_data_file /dev/$VG/__lvmsynctest_dest
+$LVMSYNC --apply $HERE/,,snapshot_data_file /dev/$VG/__lvmsynctest_dest
 
 # Verify that our source and dest are now equal
 SRCSUM="$(md5sum </dev/$VG/__lvmsynctest_src)"
@@ -41,8 +41,8 @@ trap "" EXIT
 
 # Make sure test succeeded
 if [ "$SRCSUM" != "$DESTSUM" ]; then
-	echo "FAIL: 00simple_local_sync"
+	echo "FAIL: 05sync_via_snapshot_file"
 	exit 1
 else
-	echo "OK: 00simple_local_sync"
+	echo "OK: 05sync_via_snapshot_file"
 fi

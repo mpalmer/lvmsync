@@ -1,13 +1,16 @@
 #!/bin/bash
 
 set -e
-set -x
 
 # Must run as root, because we're doing LVM manipulation
 if [ "$EUID" != "0" ]; then
 	echo "Must run this testsuite as root" >&2
 	exit 1
 fi
+
+HERE="$(dirname $(dirname $(readlink -f $0)))"
+export RUBYLIB="$HERE/lib"
+LVMSYNC="$HERE/bin/lvmsync"
 
 # Make sure there aren't any remnant lvmsync test LVs from a previous test
 # run that bombed unceremoniously.  Since we don't want to nuke *anything*

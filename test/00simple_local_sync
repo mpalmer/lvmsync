@@ -21,7 +21,7 @@ while dd if=/dev/urandom of=/dev/$VG/__lvmsynctest_src bs=512 count=1 seek=$(($i
 done
 
 # Now lvmsync!
-lvmsync /dev/$VG/__lvmsynctest_snap /dev/$VG/__lvmsynctest_dest || true
+$LVMSYNC /dev/$VG/__lvmsynctest_snap /dev/$VG/__lvmsynctest_dest || true
 
 # Verify that our source and dest are now equal
 SRCSUM="$(md5sum </dev/$VG/__lvmsynctest_src)"
