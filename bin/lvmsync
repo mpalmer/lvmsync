@@ -188,7 +188,7 @@ def run_client(opts)
 		server_cmd = if desthost
 			"ssh #{desthost} lvmsync --apply - #{snapback} #{destdev}"
 		else
-			"lvmsync --apply - #{snapback} #{destdev}"
+			"#{$0} --apply - #{snapback} #{destdev}"
 		end
 
 		outfd = IO.popen(server_cmd, 'w')
