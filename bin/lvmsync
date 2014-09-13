@@ -50,6 +50,9 @@ def main()
 		opts.on("-s", "--stdout", "Write output data to stdout rather than another lvmsync process") do |v|
 			options[:stdout] = true
 		end
+		opts.on("-r", "--readfrom <lv>", "Name of the LV to read from; defaults to the origin of the snapshot given") do |v|
+			options[:readfrom] = v
+		end
 	end.parse!
 
 	if options[:apply]
@@ -149,6 +152,7 @@ def run_client(opts)
 	snapshot = opts[:snapdev]
 	desthost = opts[:desthost]
 	destdev = opts[:destdev]
+	readfrom = opts[:readfrom]
 	outfd = nil
 
 	vg, lv = parse_snapshot_name(snapshot)
@@ -162,9 +166,9 @@ def run_client(opts)
 
 	snap = if vgconfig.logical_volumes[lv].snapshot?
 		if vgconfig.logical_volumes[lv].thin?
-			LVM::ThinSnapshot.new(vg, lv)
+			LVM::ThinSnapshot.new(vg, lv, readfrom)
 		else
-			LVM::Snapshot.new(vg, lv)
+			LVM::Snapshot.new(vg, lv, readfrom)
 		end
 	else
 		$stderr.puts "#{snapshot}: Not a snapshot device"
