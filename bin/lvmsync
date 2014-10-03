@@ -19,6 +19,7 @@
 #
 require 'optparse'
 require 'lvm'
+require 'git-version-bump'
 
 PROTOCOL_VERSION = "lvmsync PROTO[3]"
 
@@ -30,8 +31,9 @@ def main()
 	OptionParser.new do |opts|
 		opts.banner = "Usage: lvmsync [options]"
 		opts.separator ""
-		opts.separator "    lvmsync [--snapback <file>] <snapshot device> [--stdout | [<desthost>:]<destdevice>]"
-		opts.separator "    lvmsync [--snapback <file>] --apply <changes file> <destdevice>"
+		opts.separator "    lvmsync [-v|--verbose] [--snapback <file>] <snapshot device> [--stdout | [<desthost>:]<destdevice>]"
+		opts.separator "    lvmsync [-v|--verbose] [--snapback <file>] --apply <changes file> <destdevice>"
+		opts.separator "    lvmsync <-V|--version>"
 		opts.separator ""
 
 		opts.on("--server", "Run in server mode (deprecated; use '--apply -' instead)") do |v|
@@ -49,6 +51,16 @@ def main()
 		end
 		opts.on("-s", "--stdout", "Write output data to stdout rather than another lvmsync process") do |v|
 			options[:stdout] = true
+		end
+		opts.on("-V", "--version", "Print version of lvmsync") do |v|
+			begin
+				puts "lvmsync #{GVB.version}"
+				exit 0
+			rescue GVB::VersionUnobtainable
+				$stderr.puts "Unable to determine lvmsync version."
+				$stderr.puts "Install lvmsync as a gem, or run it from within a git checkout"
+				exit 1
+			end
 		end
 	end.parse!
 
