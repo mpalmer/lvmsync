@@ -33,6 +33,7 @@ Gem::Specification.new do |s|
 	s.add_runtime_dependency "treetop"
 
 	s.add_development_dependency 'bundler'
+	s.add_development_dependency 'github-release'
 	s.add_development_dependency 'guard-spork'
 	s.add_development_dependency 'guard-rspec'
 	s.add_development_dependency 'plymouth'
