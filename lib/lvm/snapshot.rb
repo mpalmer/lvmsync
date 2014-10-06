@@ -30,15 +30,15 @@ class LVM::Snapshot
 
 				while in_progress
 					# The snapshot on-disk format is a stream of <blocklist>, <blockdata>
-					# sets; within each <blocklist>, it's network-byte-order 64-bit block
+					# sets; within each <blocklist>, it's little-endian 64-bit block
 					# IDs -- the first is the location (chunk_size * offset) in the origin
 					# LV that the data has been changed, the second is the location (again,
 					# chunk_size * offset) in the metadata LV where the changed data is
 					# being stored.
 					(chunk_size / 16).times do
 						origin_offset, snap_offset = metafd.read(16).unpack("QQ")
-						origin_offset = ntohq(origin_offset)
-						snap_offset   = ntohq(snap_offset)
+						origin_offset = dtohq(origin_offset)
+						snap_offset   = dtohq(snap_offset)
 
 						# A snapshot offset of 0 would point back to the metadata
 						# device header, so that's clearly invalid -- hence it's the
