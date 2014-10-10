@@ -1,0 +1,64 @@
+trap "lvremove -f $VG/__lvmsynctest_src || true;
+      lvremove -f $VG/__lvmsynctest_dest || true;
+      lvremove -f $VG/__lvmsynctest_snap || true;
+      rm -f $HERE/,,snapback_file || true" EXIT
+
+lvcreate -l 5 -n __lvmsynctest_src $VG >/dev/null
+lvcreate -l 5 -n __lvmsynctest_dest $VG >/dev/null
+
+# Fill src with gibberish
+dd if=/dev/urandom of=/dev/$VG/__lvmsynctest_src bs=1M >/dev/null 2>&1 || true
+
+# Snapshot
+lvcreate --snapshot $VG/__lvmsynctest_src -l 5 -n __lvmsynctest_snap >/dev/null
+
+# Initial copy
+dd if=/dev/$VG/__lvmsynctest_src of=/dev/$VG/__lvmsynctest_dest bs=1M >/dev/null 2>&1
+
+# Write in some gibberish at intervals across the LV
+i=0
+while dd if=/dev/urandom of=/dev/$VG/__lvmsynctest_src bs=512 count=1 seek=$(($i*2048)) >/dev/null 2>&1; do
+	i=$(($i+1))
+done
+
+# We need to know what we had before the lvmsync, so we can make sure the
+# snapback file worked
+ORIGSUM="$(md5sum </dev/$VG/__lvmsynctest_dest)"
+
+# Now lvmsync, capturing a snapback file
+$LVMSYNC /dev/$VG/__lvmsynctest_snap \
+         /dev/$VG/__lvmsynctest_dest \
+         --snapback $HERE/,,snapback_file 2>/dev/null || true
+
+# Verify that our source and dest are now equal
+SRCSUM="$(md5sum </dev/$VG/__lvmsynctest_dest)"
+DESTSUM="$(md5sum </dev/$VG/__lvmsynctest_dest)"
+
+# Now apply the snapback file to the dest, to bring it back to what it was
+# before the lvmsync
+$LVMSYNC --apply $HERE/,,snapback_file /dev/$VG/__lvmsynctest_dest 2>/dev/null || true
+
+# And get a sum of what the dest looks like now
+POSTSNAPBACKSUM="$(md5sum </dev/$VG/__lvmsynctest_dest)"
+
+# Cleanup
+lvremove -f $VG/__lvmsynctest_snap >/dev/null
+lvremove -f $VG/__lvmsynctest_dest >/dev/null
+lvremove -f $VG/__lvmsynctest_src >/dev/null
+rm -f $HERE/,,snapback_file
+
+trap "" EXIT
+
+# Make sure test succeeded
+if [ "$SRCSUM" != "$DESTSUM" ]; then
+	echo "FAIL: 10snapback: Initial lvmsync failed to apply correctly"
+	exit 1
+fi
+
+if [ "$ORIGSUM" != "$POSTSNAPBACKSUM" ]; then
+	echo "FAIL: 10snapback: snapback file did not restore original
+	device contents"
+	exit 1
+fi
+
+echo "OK: 10snapback"
