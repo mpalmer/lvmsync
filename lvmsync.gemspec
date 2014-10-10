@@ -29,7 +29,7 @@ Gem::Specification.new do |s|
 	}
 	s.executables = ["lvmsync"]
 
-	s.add_runtime_dependency "git-version-bump"
+	s.add_runtime_dependency "git-version-bump", "~> 0.10"
 	s.add_runtime_dependency "treetop"
 
 	s.add_development_dependency 'bundler'
