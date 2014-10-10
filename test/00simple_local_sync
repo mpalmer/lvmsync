@@ -2,17 +2,17 @@ trap "lvremove -f $VG/__lvmsynctest_src || true;
       lvremove -f $VG/__lvmsynctest_dest || true;
       lvremove -f $VG/__lvmsynctest_snap || true" EXIT
 
-lvcreate -l 5 -n __lvmsynctest_src $VG
-lvcreate -l 5 -n __lvmsynctest_dest $VG
+lvcreate -l 5 -n __lvmsynctest_src $VG >/dev/null
+lvcreate -l 5 -n __lvmsynctest_dest $VG >/dev/null
 
 # Fill src with gibberish
-dd if=/dev/urandom of=/dev/$VG/__lvmsynctest_src bs=1M || true
+dd if=/dev/urandom of=/dev/$VG/__lvmsynctest_src bs=1M >/dev/null 2>&1 || true
 
 # Snapshot
-lvcreate --snapshot $VG/__lvmsynctest_src -l 5 -n __lvmsynctest_snap
+lvcreate --snapshot $VG/__lvmsynctest_src -l 5 -n __lvmsynctest_snap >/dev/null
 
 # Initial copy
-dd if=/dev/$VG/__lvmsynctest_src of=/dev/$VG/__lvmsynctest_dest bs=1M
+dd if=/dev/$VG/__lvmsynctest_src of=/dev/$VG/__lvmsynctest_dest bs=1M >/dev/null 2>&1
 
 # Write in some gibberish at intervals across the LV
 i=0
@@ -21,16 +21,16 @@ while dd if=/dev/urandom of=/dev/$VG/__lvmsynctest_src bs=512 count=1 seek=$(($i
 done
 
 # Now lvmsync!
-$LVMSYNC /dev/$VG/__lvmsynctest_snap /dev/$VG/__lvmsynctest_dest || true
+$LVMSYNC /dev/$VG/__lvmsynctest_snap /dev/$VG/__lvmsynctest_dest 2>/dev/null || true
 
 # Verify that our source and dest are now equal
 SRCSUM="$(md5sum </dev/$VG/__lvmsynctest_src)"
 DESTSUM="$(md5sum </dev/$VG/__lvmsynctest_dest)"
 
 # Cleanup
-lvremove -f $VG/__lvmsynctest_snap
-lvremove -f $VG/__lvmsynctest_dest
-lvremove -f $VG/__lvmsynctest_src
+lvremove -f $VG/__lvmsynctest_snap >/dev/null
+lvremove -f $VG/__lvmsynctest_dest >/dev/null
+lvremove -f $VG/__lvmsynctest_src >/dev/null
 
 trap "" EXIT
 
