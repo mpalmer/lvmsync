@@ -20,6 +20,7 @@
 require 'optparse'
 require 'lvm'
 require 'git-version-bump'
+require 'open3'
 
 PROTOCOL_VERSION = "lvmsync PROTO[3]"
 
@@ -163,27 +164,19 @@ def run_client(opts)
 	destdev = opts[:destdev]
 	outfd = nil
 
-	vg, lv = parse_snapshot_name(snapshot)
-
-	vgconfig = LVM::VGConfig.new(vg)
-
-	if vgconfig.logical_volumes[lv].nil?
-		$stderr.puts "#{snapshot}: Could not find logical volume"
+	lv = begin
+		LVM::LogicalVolume.new(snapshot)
+	rescue RuntimeError => e
+		$stderr.puts "#{snapshot}: could not find logical volume (#{e.message})"
 		exit 1
 	end
 
-	snap = if vgconfig.logical_volumes[lv].snapshot?
-		if vgconfig.logical_volumes[lv].thin?
-			LVM::ThinSnapshot.new(vg, lv)
-		else
-			LVM::Snapshot.new(vg, lv)
-		end
-	else
+	unless lv.snapshot?
 		$stderr.puts "#{snapshot}: Not a snapshot device"
 		exit 1
 	end
 
-	$stderr.puts "Origin device: #{vg}/#{snap.origin}" if opts[:verbose]
+	$stderr.puts "Origin device: #{lv.origin.path}" if opts[:verbose]
 
 	# Since, in principle, we're not supposed to be reading from snapshot
 	# devices directly, the kernel makes no attempt to make the device's read
@@ -195,7 +188,7 @@ def run_client(opts)
 	snapback = opts[:snapback] ? "--snapback #{opts[:snapback]}" : ''
 
 	if opts[:stdout]
-		outfd = $stdout
+		dump_changes(lv, $stdout, opts)
 	else
 		server_cmd = if desthost
 			"ssh #{desthost} lvmsync --apply - #{snapback} #{destdev}"
@@ -203,9 +196,24 @@ def run_client(opts)
 			"#{$0} --apply - #{snapback} #{destdev}"
 		end
 
-		outfd = IO.popen(server_cmd, 'w')
-	end
+		exit_status = nil
+		errors = nil
 
+		Open3.popen3(server_cmd) do |stdin_fd, stdout_fd, stderr_fd, wait_thr|
+			dump_changes(lv, stdin_fd, opts)
+			stdin_fd.close
+			errors = stderr_fd.read
+			exit_status = wait_thr.value if wait_thr
+		end
+
+		if (exit_status or $?).exitstatus != 0
+			$stderr.puts "APPLY FAILED."
+			$stderr.puts errors.split("\n").map { |l| "remote: #{l}" }.join("\n")
+		end
+	end
+end
+
+def dump_changes(lv, outfd, opts)
 	outfd.puts PROTOCOL_VERSION
 
 	start_time = Time.now
@@ -213,9 +221,8 @@ def run_client(opts)
 	xfer_size  = 0
 	total_size = 0
 
-	originfile = "/dev/mapper/#{vg.gsub('-', '--')}-#{snap.origin.gsub('-', '--')}"
-	File.open(originfile, 'r') do |origindev|
-		snap.differences.each do |r|
+	File.open(lv.origin.path, 'r') do |origindev|
+		lv.changes.each do |r|
 			xfer_count += 1
 			chunk_size = r.last - r.first + 1
 			xfer_size  += chunk_size
@@ -247,8 +254,6 @@ def run_client(opts)
 
 	$stderr.printf "You transferred your changes %.2fx faster than a full dd!\n",
 	               total_size.to_f / xfer_size
-ensure
-	outfd.close unless outfd.nil? or outfd == $stdout
 end
 
 # Take a device name in any number of different formats and return a [VG, LV] pair.

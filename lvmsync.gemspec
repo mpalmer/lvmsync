@@ -19,6 +19,7 @@ Gem::Specification.new do |s|
 		bin/lvmsync
 		lib/lvm.rb
 		lib/lvm/lv_config.rb
+		lib/lvm/logical_volume.rb
 		lib/lvm/thin_snapshot.rb
 		lib/lvm/snapshot.rb
 		lib/lvm/vg_config.rb
