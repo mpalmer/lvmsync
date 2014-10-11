@@ -118,7 +118,7 @@ ensure
 	infile.close unless infile.nil? or infile == $stdin
 end
 
-def process_dumpdata(instream, destdev, snapback = nil, opts)
+def process_dumpdata(instream, destdev, snapback = nil, opts = {})
 	handshake = instream.readline.chomp
 	unless handshake == PROTOCOL_VERSION
 		$stderr.puts "Handshake failed; protocol mismatch? (saw '#{handshake}' expected '#{PROTOCOL_VERSION}'"
