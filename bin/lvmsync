@@ -207,7 +207,11 @@ def run_client(opts)
 					more_to_read = false
 					(IO.select([stdout_fd, stderr_fd], [], [], 0) || [[]])[0].each do |fd|
 						more_to_read = true
-						$stderr.puts "\e[2K\rremote:#{fd.readline}"
+						begin
+							$stderr.puts "\e[2K\rremote:#{fd.readline}"
+						rescue EOFError, Errno::EPIPE
+							# lolwhateva
+						end
 					end
 				end
 			end
