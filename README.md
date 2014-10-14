@@ -107,7 +107,7 @@ Let's say you've got an LV, named `vmsrv1/somevm`, and you'd like to
 synchronise it to a new VM server, named `vmsrv2`.  Assuming that `lvmsync` is
 installed on `vmsrv2` and `vmsrv2` has an LV named `vmsrv2/somevm` large
 enough to take the data, the following will do the trick rather nicely (all
-commands should be run on `vmsrv1`:
+commands should be run on `vmsrv1`):
 
     # Take a snapshot before we do anything, so LVM will record all changes
     # made while we're doing the initial sync
@@ -168,7 +168,7 @@ each hour):
 
 This will produce files in /var/snapbacks named `somevm.<date-time>`.  You
 need to create the `somevm-snapback-new` snapshot before you start
-`lvmsync`, so that you can guarantee no changes won't get noticed.
+`lvmsync`, so that you can guarantee no changes will go unnoticed.
 
 There are some fairly large caveats to this method -- the LV will still be
 collecting writes while you're transferring the snapshots, so you won't get
