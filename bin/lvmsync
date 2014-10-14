@@ -61,6 +61,10 @@ def main()
 			options[:stdout] = true
 		end
 
+		opts.on("-r", "--data-source", "Read data blocks from a block device other than the snapshot origin") do |v|
+			options[:source] = v
+		end
+
 		opts.on("-V", "--version", "Print version of lvmsync") do |v|
 			begin
 				puts "lvmsync #{GVB.version}"
@@ -189,8 +193,6 @@ def run_client(opts)
 		exit 1
 	end
 
-	$stderr.puts "Origin device: #{lv.origin.path}" if opts[:verbose]
-
 	# Since, in principle, we're not supposed to be reading from snapshot
 	# devices directly, the kernel makes no attempt to make the device's read
 	# cache stay in sync with the actual state of the device.  As a result,
@@ -200,8 +202,11 @@ def run_client(opts)
 
 	snapback = opts[:snapback] ? "--snapback #{opts[:snapback]}" : ''
 
+	source = opts[:source] || lv.origin.path
+	$stderr.puts "Data source: #{source}" if opts[:verbose]
+
 	if opts[:stdout]
-		dump_changes(lv, $stdout, opts)
+		dump_changes(lv, source, $stdout, opts)
 	else
 		verbose = opts[:verbose] ? '-v' : ''
 		server_cmd = if desthost
@@ -216,7 +221,7 @@ def run_client(opts)
 		Open3.popen3(server_cmd) do |stdin_fd, stdout_fd, stderr_fd, wait_thr|
 			fds = [stdout_fd, stderr_fd]
 
-			dump_changes(lv, stdin_fd, opts) do
+			dump_changes(lv, source, stdin_fd, opts) do
 				# Remember that this fires between *every* block sent to the
 				# receiver, so don't do anything particularly slow in here!
 				until (active_fds = IO.select(fds, [], [], 0)).nil?
@@ -257,23 +262,23 @@ def run_client(opts)
 	end
 end
 
-def dump_changes(lv, outfd, opts)
+def dump_changes(snapshot, source, outfd, opts)
 	outfd.puts PROTOCOL_VERSION
 
 	start_time = Time.now
 	xfer_count = 0
 	xfer_size  = 0
 	total_size = 0
-	change_count = lv.changes.length
+	change_count = snapshot.changes.length
 
-	File.open(lv.origin.path, 'r') do |origindev|
-		lv.changes.each do |r|
+	File.open(source, 'r') do |origindev|
+		snapshot.changes.each do |r|
 			xfer_count += 1
 			chunk_size = r.last - r.first + 1
 			xfer_size  += chunk_size
 
 			$stderr.puts "Sending chunk #{r.to_s}..." if opts[:verbose]
-			$stderr.puts "Seeking to #{r.first} in #{lv.origin.path}" if opts[:verbose]
+			$stderr.puts "Seeking to #{r.first} in #{source}" if opts[:verbose]
 
 			origindev.seek(r.first, IO::SEEK_SET)
 
