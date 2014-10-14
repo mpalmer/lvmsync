@@ -201,24 +201,38 @@ def run_client(opts)
 		errors = nil
 
 		Open3.popen3(server_cmd) do |stdin_fd, stdout_fd, stderr_fd, wait_thr|
+			fds = [stdout_fd, stderr_fd]
+
 			dump_changes(lv, stdin_fd, opts) do
-				more_to_read = true
-				while more_to_read
-					more_to_read = false
-					(IO.select([stdout_fd, stderr_fd], [], [], 0) || [[]])[0].each do |fd|
-						more_to_read = true
+				# Remember that this fires between *every* block sent to the
+				# receiver, so don't do anything particularly slow in here!
+				until (active_fds = IO.select(fds, [], [], 0)).nil?
+					active_fds[0].each do |fd|
 						begin
 							$stderr.puts "\e[2K\rremote:#{fd.readline}"
 						rescue EOFError, Errno::EPIPE
-							# lolwhateva
+							fd.close
+							fds.delete(fd)
 						end
 					end
 				end
 			end
+
 			stdin_fd.close
-			[stderr_fd, stdout_fd].each do |fd|
-				until fd.eof?
-					$stderr.puts "\e[2K\rremote:#{fd.readline}"
+
+			# Read any residual data that might be left in the stdout/stderr of
+			# the remote; we've got to do this with a timeout because of
+			# OpenSSH, which, when used in ControlMaster ("multiplexing") mode,
+			# holds open stderr, meaning that IO.select will never indicate
+			# that stderr is finished.
+			until (active_fds = IO.select(fds, [], [], 0.1)).nil?
+				active_fds[0].each do |fd|
+					begin
+						$stderr.puts "\e[2K\rremote:#{fd.readline}"
+					rescue EOFError, Errno::EPIPE
+						fd.close
+						fds.delete(fd)
+					end
 				end
 			end
 			exit_status = wait_thr.value if wait_thr
