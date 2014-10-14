@@ -40,19 +40,27 @@ def main()
 		opts.on("--server", "Run in server mode (deprecated; use '--apply -' instead)") do |v|
 			options[:server] = true
 		end
+
 		opts.on("-v", "--[no-]verbose",
-		        "Run verbosely") { |v| options[:verbose] = true }
+		        "Run verbosely") { |v| options[:verbose] = v }
+
+		opts.on("-q", "--[no-]quiet",
+		        "Run quietly") { |v| options[:quiet] = v }
+
 		opts.on("-b <file>", "--snapback <file>",
 		        "Make a backup snapshot file on the destination") do |v|
 			options[:snapback] = v
 		end
+
 		opts.on("-a", "--apply <file>",
 		        "Apply mode: write the contents of a snapback file to a device") do |v|
 			options[:apply] = v
 		end
+
 		opts.on("-s", "--stdout", "Write output data to stdout rather than another lvmsync process") do |v|
 			options[:stdout] = true
 		end
+
 		opts.on("-V", "--version", "Print version of lvmsync") do |v|
 			begin
 				puts "lvmsync #{GVB.version}"
@@ -65,6 +73,11 @@ def main()
 		end
 	end.parse!
 
+	if options[:quiet] and options[:verbose]
+		$stderr.puts "I can't run quietly *and* verbosely at the same time!"
+		exit 1
+	end
+
 	if options[:apply]
 		if ARGV[0].nil?
 			$stderr.puts "No destination device specified."
@@ -73,7 +86,7 @@ def main()
 		options[:device] = ARGV[0]
 		run_apply(options)
 	elsif options[:server]
-		$stderr.puts "--server is deprecated; please use '--apply -' instead"
+		$stderr.puts "--server is deprecated; please use '--apply -' instead" unless opts[:quiet]
 		if (ARGV[0].nil?)
 			$stderr.puts "No destination block device specified.  WTF?"
 			exit 1
@@ -209,7 +222,7 @@ def run_client(opts)
 				until (active_fds = IO.select(fds, [], [], 0)).nil?
 					active_fds[0].each do |fd|
 						begin
-							$stderr.puts "\e[2K\rremote:#{fd.readline}"
+							$stderr.puts "\e[2K\rremote:#{fd.readline}" unless opts[:quiet]
 						rescue EOFError, Errno::EPIPE
 							fd.close
 							fds.delete(fd)
@@ -228,7 +241,7 @@ def run_client(opts)
 			until (active_fds = IO.select(fds, [], [], 0.1)).nil?
 				active_fds[0].each do |fd|
 					begin
-						$stderr.puts "\e[2K\rremote:#{fd.readline}"
+						$stderr.puts "\e[2K\rremote:#{fd.readline}" unless opts[:quiet]
 					rescue EOFError, Errno::EPIPE
 						fd.close
 						fds.delete(fd)
@@ -274,7 +287,7 @@ def dump_changes(lv, outfd, opts)
 			end
 
 			# Progress bar!
-			if xfer_count % 100 == 50
+			if xfer_count % 100 == 50 and !opts[:quiet]
 				$stderr.printf "\e[2K\rSending chunk %i of %i, %.2fMB/s",
 									xfer_count,
 									change_count,
@@ -288,11 +301,13 @@ def dump_changes(lv, outfd, opts)
 		total_size = origindev.tell
 	end
 
-	$stderr.printf "\rTransferred %i bytes in %.2f seconds\n",
-	               xfer_size, Time.now - start_time
+	unless opts[:quiet]
+		$stderr.printf "\rTransferred %i bytes in %.2f seconds\n",
+		               xfer_size, Time.now - start_time
 
-	$stderr.printf "You transferred your changes %.2fx faster than a full dd!\n",
-	               total_size.to_f / xfer_size
+		$stderr.printf "You transferred your changes %.2fx faster than a full dd!\n",
+		               total_size.to_f / xfer_size
+	end
 end
 
 # Take a device name in any number of different formats and return a [VG, LV] pair.
