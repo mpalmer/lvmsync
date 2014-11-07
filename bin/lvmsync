@@ -43,10 +43,13 @@ def main()
 		end
 
 		opts.on("-v", "--[no-]verbose",
-		        "Run verbosely") { |v| options[:verbose] = v }
+		        "Run verbosely") { |v| $verbose = v }
+
+		opts.on("-d", "--[no-]debug",
+		        "Print debugging information") { |v| $debug = v }
 
 		opts.on("-q", "--[no-]quiet",
-		        "Run quietly") { |v| options[:quiet] = v }
+		        "Run quietly") { |v| $quiet = v }
 
 		opts.on("-b <file>", "--snapback <file>",
 		        "Make a backup snapshot file on the destination") do |v|
@@ -75,49 +78,42 @@ def main()
 				puts "lvmsync #{GVB.version}"
 				exit 0
 			rescue GVB::VersionUnobtainable
-				$stderr.puts "Unable to determine lvmsync version."
-				$stderr.puts "Install lvmsync as a gem, or run it from within a git checkout"
-				exit 1
+				fatal "Unable to determine lvmsync version.\n" +
+				      "Install lvmsync as a gem, or run it from within a git checkout"
 			end
 		end
 	end.parse!
 
-	if options[:quiet] and options[:verbose]
-		$stderr.puts "I can't run quietly *and* verbosely at the same time!"
-		exit 1
+	if $quiet and ($verbose or $debug)
+		fatal "I can't run quietly *and* verbosely at the same time!"
 	end
 
 	if options[:apply]
 		if ARGV[0].nil?
-			$stderr.puts "No destination device specified."
-			exit 1
+			fatal "No destination device specified."
 		end
 		options[:device] = ARGV[0]
 		run_apply(options)
 	elsif options[:server]
-		$stderr.puts "--server is deprecated; please use '--apply -' instead" unless opts[:quiet]
+		info "--server is deprecated; please use '--apply -' instead"
 		if (ARGV[0].nil?)
-			$stderr.puts "No destination block device specified.  WTF?"
-			exit 1
+			fatal "No destination block device specified.  WTF?"
 		end
 		options[:apply] = '-'
 		options[:device] = ARGV[0]
 		run_apply(options)
 	else
 		if ARGV[0].nil?
-			$stderr.puts "ERROR: No snapshot specified.  Exiting."
-			exit 1
+			fatal "No snapshot specified.  Exiting.  Do you need --help?"
 		end
 		options[:snapdev] = ARGV[0]
 
 		if options[:stdout] and options[:snapback]
-			$stderr.puts "--snapback cannot be used with --stdout"
-			exit 1
+			fatal "--snapback cannot be used with --stdout"
 		end
 
 		if (options[:stdout].nil? and ARGV[1].nil?)
-			$stderr.puts "No destination specified."
-			exit 1
+			fatal "No destination specified."
 		end
 		if options[:stdout].nil?
 			dev, host = ARGV[1].split(':', 2).reverse
@@ -143,18 +139,19 @@ end
 def process_dumpdata(instream, destdev, snapback = nil, opts = {})
 	handshake = instream.readline.chomp
 	unless handshake == PROTOCOL_VERSION
-		$stderr.puts "Handshake failed; protocol mismatch? (saw '#{handshake}' expected '#{PROTOCOL_VERSION}'"
-		exit 1
+		fatal "Handshake failed; protocol mismatch? (saw '#{handshake}' expected '#{PROTOCOL_VERSION}'"
 	end
 
 	snapback.puts handshake if snapback
 
+	verbose "Writing changed data to #{destdev.inspect}"
 	File.open(destdev, 'w+') do |dest|
 		while header = instream.read(12)
 			offset, chunksize = header.unpack("QN")
 			offset = ntohq(offset)
 
 			begin
+				debug "Seeking to #{offset}"
 				dest.seek offset
 			rescue Errno::EINVAL
 				# In certain rare circumstances, we want to transfer a block
@@ -163,6 +160,8 @@ def process_dumpdata(instream, destdev, snapback = nil, opts = {})
 				# seek past the end of the device.  Yes, this may lose data, but
 				# if you didn't notice that your dd shit itself, it's unlikely
 				# you're going to notice now.
+
+				info "Write occured past end of device"
 
 				# Skip the chunk of data
 				instream.read(chunksize)
@@ -173,9 +172,12 @@ def process_dumpdata(instream, destdev, snapback = nil, opts = {})
 			if snapback
 				snapback.write(header)
 				snapback.write dest.read(chunksize)
+				# Got to back to where we were before, since the read from dest
+				# has advanced the file pointer by `chunksize`
 				dest.seek offset
 			end
 			dest.write instream.read(chunksize)
+			debug "Wrote #{chunksize} bytes at #{offset}"
 		end
 	end
 end
@@ -189,13 +191,11 @@ def run_client(opts)
 	lv = begin
 		LVM::LogicalVolume.new(snapshot)
 	rescue RuntimeError => e
-		$stderr.puts "#{snapshot}: could not find logical volume (#{e.message})"
-		exit 1
+		fatal "#{snapshot}: could not find logical volume (#{e.message})"
 	end
 
 	unless lv.snapshot?
-		$stderr.puts "#{snapshot}: Not a snapshot device"
-		exit 1
+		fatal "#{snapshot}: Not a snapshot device"
 	end
 
 	# Since, in principle, we're not supposed to be reading from snapshot
@@ -208,14 +208,16 @@ def run_client(opts)
 	snapback = opts[:snapback] ? "--snapback #{opts[:snapback]}" : ''
 
 	source = opts[:source] || lv.origin.path
-	$stderr.puts "Data source: #{source}" if opts[:verbose]
+	verbose "Data source: #{source}"
 
 	if opts[:stdout]
 		dump_changes(lv, source, $stdout, opts)
 	else
-		verbose = opts[:verbose] ? '-v' : ''
+		verbose = $verbose ? '-v' : ''
+		debug   = $debug   ? '-d' : ''
+
 		server_cmd = if desthost
-			"#{opts[:rsh]} #{desthost} lvmsync --apply - #{snapback} #{verbose} #{destdev}"
+			"#{opts[:rsh]} #{desthost} lvmsync --apply - #{snapback} #{verbose} #{debug} #{destdev}"
 		else
 			"#{$0} --apply - #{snapback} #{verbose} #{destdev}"
 		end
@@ -232,7 +234,7 @@ def run_client(opts)
 				until (active_fds = IO.select(fds, [], [], 0)).nil?
 					active_fds[0].each do |fd|
 						begin
-							$stderr.puts "\e[2K\rremote:#{fd.readline}" unless opts[:quiet]
+							info "\e[2K\rremote:#{fd.readline}"
 						rescue EOFError, Errno::EPIPE
 							fd.close
 							fds.delete(fd)
@@ -251,7 +253,7 @@ def run_client(opts)
 			until (active_fds = IO.select(fds, [], [], 0.1)).nil?
 				active_fds[0].each do |fd|
 					begin
-						$stderr.puts "\e[2K\rremote:#{fd.readline}" unless opts[:quiet]
+						info "\e[2K\rremote:#{fd.readline}"
 					rescue EOFError, Errno::EPIPE
 						fd.close
 						fds.delete(fd)
@@ -262,7 +264,7 @@ def run_client(opts)
 		end
 
 		if (exit_status or $?).exitstatus != 0
-			$stderr.puts "APPLY FAILED."
+			fatal "APPLY FAILED."
 		end
 	end
 end
@@ -282,8 +284,7 @@ def dump_changes(snapshot, source, outfd, opts)
 			chunk_size = r.last - r.first + 1
 			xfer_size  += chunk_size
 
-			$stderr.puts "Sending chunk #{r.to_s}..." if opts[:verbose]
-			$stderr.puts "Seeking to #{r.first} in #{source}" if opts[:verbose]
+			debug "Sending chunk #{r.to_s}..."
 
 			origindev.seek(r.first, IO::SEEK_SET)
 
@@ -297,7 +298,7 @@ def dump_changes(snapshot, source, outfd, opts)
 			end
 
 			# Progress bar!
-			if xfer_count % 100 == 50 and !opts[:quiet]
+			if xfer_count % 100 == 50 and !$quiet
 				$stderr.printf "\e[2K\rSending chunk %i of %i, %.2fMB/s",
 									xfer_count,
 									change_count,
@@ -311,7 +312,7 @@ def dump_changes(snapshot, source, outfd, opts)
 		total_size = origindev.tell
 	end
 
-	unless opts[:quiet]
+	unless $quiet
 		$stderr.printf "\rTransferred %i bytes in %.2f seconds\n",
 		               xfer_size, Time.now - start_time
 
@@ -334,6 +335,23 @@ def parse_snapshot_name(origname)
 			raise ArgumentError,
 			      "Could not determine snapshot name and VG from #{origname.inspect}"
 	end
+end
+
+def debug(s)
+	$stderr.puts s if $debug
+end
+
+def verbose(s)
+	$stderr.puts s if $verbose or $debug
+end
+
+def info(s)
+	$stderr.puts s unless $quiet
+end
+
+def fatal(s, status=1)
+	$stderr.puts "FATAL ERROR: #{s}"
+	exit status
 end
 
 main
