@@ -164,4 +164,18 @@ describe LVM::VGConfig do
 			end
 		end
 	end
+
+	context "striped config" do
+		let(:vg_name) { "striped" }
+
+		it "parses successfully" do
+			expect { vgcfg }.to_not raise_error
+		end
+
+		it "contains logical volumes" do
+			expect(vgcfg.logical_volumes).to be_a(Hash)
+
+			vgcfg.logical_volumes.values.each { |lv| expect(lv).to be_an(LVM::LVConfig) }
+		end
+	end
 end

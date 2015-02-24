@@ -1,0 +1,84 @@
+contents = "Text Format Volume Group"
+version = 1
+
+description = "vgcfgbackup -f /tmp/faffen2"
+
+striped {
+	id = "zAPMOi-5QlD-fp1M-FMgz-biha-TQIP-X9TfqX"
+	seqno = 436
+	format = "lvm2" # informational
+	status = ["RESIZEABLE", "READ", "WRITE"]
+	flags = []
+	extent_size = 8192		# 4 Megabytes
+	max_lv = 0
+	max_pv = 0
+	metadata_copies = 0
+
+	physical_volumes {
+
+		pv0 {
+			id = "j7ZiWs-1fHB-aAwq-yL29-pBOk-H4hR-AOIe0P"
+			device = "/dev/dm-0"	# Hint only
+
+			status = ["ALLOCATABLE"]
+			flags = []
+			dev_size = 1952545832	# 931.046 Gigabytes
+			pe_start = 384
+			pe_count = 238347	# 931.043 Gigabytes
+		}
+
+		pv1 {
+                        id = "afl7D7-Rpy1-Is3H-SFxo-d03x-s8dE-lEgZWU"
+                        device = "/dev/dm-1"	# Hint only
+
+			status = ["ALLOCATABLE"]
+			flags = []
+			dev_size = 1952545832	# 931.046 Gigabytes
+			pe_start = 384
+			pe_count = 238347	# 931.043 Gigabytes
+		}
+	}
+
+	logical_volumes {
+
+		swap {
+			id = "BOfqkb-V4jw-7cBX-UR3D-SN3f-wWvd-NwysSj"
+			status = ["READ", "WRITE", "VISIBLE"]
+			flags = []
+			segment_count = 1
+
+			segment1 {
+				start_extent = 0
+				extent_count = 2048	# 8 Gigabytes
+
+				type = "striped"
+				stripe_count = 1	# linear
+
+				stripes = [
+					"pv0", 0
+				]
+			}
+		}
+
+		root {
+			id = "8sbW3s-qB1u-6IlS-ABSj-PAMU-UxRk-I18ECh"
+			status = ["READ", "WRITE", "VISIBLE"]
+			flags = []
+			segment_count = 1
+
+			segment1 {
+				start_extent = 0
+				extent_count = 3840	# 15 Gigabytes
+
+				type = "striped"
+				stripe_count = 2
+				stripe_size = 128       # 64 Kilobytes
+
+				stripes = [
+					"pv0", 21504,
+					"pv1", 21504
+				]
+			}
+		}
+	}
+}
