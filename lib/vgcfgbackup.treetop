@@ -24,7 +24,7 @@ grammar VgCfgBackup
 	end
 
 	rule list
-		"[" space? ((string / integer) ", " / (string / integer))* space? "]" <List>
+		"[" space? ((string / integer) "," space? / (string / integer))* space? "]" <List>
 	end
 
 	rule space
