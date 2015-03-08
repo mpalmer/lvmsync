@@ -145,7 +145,7 @@ def process_dumpdata(instream, destdev, snapback = nil, opts = {})
 	snapback.puts handshake if snapback
 
 	verbose "Writing changed data to #{destdev.inspect}"
-	File.open(destdev, 'w+') do |dest|
+	File.open(destdev, 'r+') do |dest|
 		while header = instream.read(12)
 			offset, chunksize = header.unpack("QN")
 			offset = ntohq(offset)
