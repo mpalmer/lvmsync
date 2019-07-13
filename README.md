@@ -315,3 +315,7 @@ mustard:
   require kernel patches, so there's a non-trivial barrier to entry, but
   probably not such a big deal if you're after network-aware snapshots as
   part of your core infrastructure.
+
+In case you would like to see a guide on how to migrate a virtual machine
+in context, check out [this blog on how to migrate a virtual machine to
+another provider using lvmsync](https://juraj.bednar.io/en/blog-en/2019/07/13/migrate-virtual-machines-using-lvm-without-access-to-hypervisor/)
