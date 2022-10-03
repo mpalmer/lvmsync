@@ -65,7 +65,7 @@ def main()
 			options[:stdout] = true
 		end
 
-		opts.on("-r", "--data-source", "Read data blocks from a block device other than the snapshot origin") do |v|
+		opts.on("-r", "--data-source <device-path>", "Read data blocks from a block device other than the snapshot origin") do |v|
 			options[:source] = v
 		end
 
