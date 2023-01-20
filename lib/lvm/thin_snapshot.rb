@@ -158,8 +158,26 @@ class LVM::ThinSnapshot
 
 	def vg_block_dump
 		@vg_block_dump ||= begin
-			doc = REXML::Document.new(`thin_dump /dev/mapper/#{@vg.gsub('-', '--')}-#{thin_pool_name.gsub('-','--')}_tmeta`)
-
+			dev_name = "/dev/mapper/#{@vg.gsub('-', '--')}-#{thin_pool_name.gsub('-','--')}"
+			cmd = <<EOC
+dmsetup message #{dev_name}-tpool 0 reserve_metadata_snap || exit 1
+block=`dmsetup status #{dev_name}-tpool | cut -f 7 -d ' '`
+test x"$block" != x -a x"$block" != x- || { echo "#{@vg}/#{@lv}: Failed to get superblock for #{thin_pool_name}" >&2; dmsetup message #{dev_name}-tpool 0 release_metadata_snap; exit 1; }
+thin_dump --format xml #{dev_name}_tmeta --metadata-snap "$block" || { dmsetup message #{dev_name}-tpool 0 release_metadata_snap; exit 1; }
+dmsetup message #{dev_name}-tpool 0 release_metadata_snap
+EOC
+			result = %x[ #{cmd} ]
+			unless $?.exitstatus == 0
+				raise RuntimeError,
+					"#{@vg}/#{@lv}: Failed to get metadata for #{thin_pool_name}"
+			end
+			
+			doc = REXML::Document.new(result)
+			unless doc != nil
+				raise RuntimeError,
+					"#{@vg}/#{@lv}: Failed to parse metadata for #{thin_pool_name}"
+			end
+			
 			doc.elements['superblock'].inject({}) do |h, dev|
 				next h unless dev.node_type == :element
 
